@@ -1,0 +1,228 @@
+# AGENTS.md: handoff do projeto Pauta de Jogos
+
+Este arquivo é a memória compartilhada entre os agentes que trabalham neste projeto (Claude Code, Codex ou qualquer outro). O usuário alterna entre eles quando acaba o limite de um, então **quem chegar aqui precisa conseguir continuar o trabalho só com este arquivo e o repositório**.
+
+---
+
+## ⚠️ Regra nº 1: mantenha este arquivo atualizado
+
+**Toda vez que você terminar uma tarefa que mudou alguma coisa, atualize este arquivo antes de encerrar.** Isso vale para mudanças no código, no n8n, no Airtable, no ambiente (instalações, configs, MCPs, credenciais), nas decisões de projeto e nos pedidos novos do usuário.
+
+Como fazer:
+1. Ajuste as seções que ficaram desatualizadas (estado atual, nós do n8n, tabelas, pendências etc.). Este arquivo descreve **como as coisas estão agora**, não como estavam.
+2. Acrescente uma entrada no [Registro de mudanças](#registro-de-mudanças) no fim: data, agente (ex.: "Claude Code", "Codex"), o que foi feito, o que ficou pendente e onde (commit, branch, n8n publicado ou não).
+3. Se a mudança foi commitada, inclua a atualização deste arquivo **no mesmo commit**.
+4. Se você parar no meio (limite, erro, usuário mudou de assunto), registre o que ficou pela metade em [Trabalho em andamento](#trabalho-em-andamento) para o próximo agente continuar.
+5. Antes de começar qualquer tarefa, leia este arquivo inteiro e rode `git status` e `git log --oneline -5`. Pode haver trabalho de outro agente que ainda não foi registrado aqui.
+
+O próximo agente pode ser outro modelo, sem acesso à sua conversa nem à sua memória. Se não estiver escrito aqui ou no repositório, ele não sabe.
+
+---
+
+## Quem é o usuário e como trabalhar com ele
+
+- **Bernard**, brasileiro. Escreva **sempre em português do Brasil**, de forma clara e direta.
+- O projeto é de **portfólio** para uma vaga que pede n8n, Airtable, LLM, fluxo agêntico e documentação (contexto: CazéTV / 365Scores). O usuário quer **entender cada etapa para explicar na entrevista**: explique o porquê das decisões, não só o que foi feito.
+- **Tudo tem que ser gratuito.** Não proponha serviço pago.
+- Ele gosta de ir **uma etapa por vez**. Teste com **dados reais** antes de dizer que funciona.
+- **Nunca leia nem cole segredos** (`.env`, tokens, chaves) no chat. Para escrever no Airtable ou chamar APIs com chave, use as **credenciais que já estão no n8n** (ver [Como escrever no Airtable](#como-escrever-no-airtable)).
+- **Commit e push só quando ele pedir.** Na `main`, crie uma branch antes de commitar e pergunte se pode juntar e fazer push. Ele já autorizou `merge --ff-only` na `main` seguido de push quando pede para "juntar e fazer push".
+- Ideias novas que ele trouxer e que não forem feitas na hora vão para o [`ROADMAP.md`](ROADMAP.md).
+- Ações com efeito externo, como rodar o fluxo inteiro (manda mensagem real no Telegram e grava no Airtable), **só com o OK dele**. Em geral ele mesmo clica em "Execute workflow" no n8n.
+
+---
+
+## O projeto em uma frase
+
+Todo dia às 7h, um fluxo no **n8n** busca os jogos do dia (futebol, NFL, NBA) e os desfalques de cada time, pede ao **Gemini** uma nota de 1 a 5, um briefing e os desfalques relevantes de cada jogo, aplica regras de corte configuradas no **Airtable**, grava tudo na tabela Jogos do Airtable e manda a pauta numa mensagem do **Telegram**.
+
+Documentação para humanos: [`README.md`](README.md) (arquitetura, decisões, como rodar) e [`docs/MANUAL.md`](docs/MANUAL.md) (manual para a produção, estrutura do Airtable). Este arquivo complementa os dois com o que um agente precisa para operar.
+
+---
+
+## Estado atual (atualize sempre)
+
+_Última atualização: 2026-10-16, Claude Code._
+
+| O quê | Situação |
+|---|---|
+| Fluxo principal no n8n | Ativo e publicado. Agenda às 7h (horário de Brasília). |
+| Futebol (football-data + ESPN Europa League) | Pronto, commitado. |
+| NFL (ESPN) | Pronto, commitado (`69c64a4`), aplicado no n8n e no Airtable. |
+| NBA (ESPN) | Pronto, commitado (`69c64a4`), aplicado no n8n e no Airtable. Testado com jogos de pré-temporada. |
+| Fontes em paralelo + Merge "Juntar fontes" | Pronto, commitado. |
+| Mensagem única no Telegram | Pronto, commitado. Só divide acima de 4096 caracteres. |
+| Janela da pauta 6h–6h | Pronto, commitado. |
+| **Desfalques (lesões/suspensões)** | **Em andamento, NÃO commitado.** Ver [Trabalho em andamento](#trabalho-em-andamento). |
+| Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` em `69c64a4` no último push. |
+
+### Trabalho em andamento
+
+**Desfalques (sessão "APIs gratuitas de lesões de jogadores", Claude Code, 2026-10-16)**
+- Arquivos alterados e **não commitados**: `README.md`, `ROADMAP.md`, `docs/MANUAL.md`, `n8n/code/montar-jogos-do-dia.js`, `montar-mensagem.js`, `preparar-pedido-gemini.js`, `selecionar-jogos.js`, `separar-jogos-airtable.js`, `n8n/workflow-pauta-de-jogos.json`.
+- **No n8n já está publicado**: três nós novos (`ESPN NFL lesões`, `ESPN NBA lesões`, `API-Football lesões`), todos ligados de `Times` para o `Juntar fontes` (agora com 7 entradas).
+- Como funciona: a ESPN (`/football/nfl/injuries`, `/basketball/nba/injuries`) traz a liga inteira numa chamada, e os desfalques casam pelo id do time. A API-Football (`/injuries?date=hoje`) traz o futebol do dia, e o jogo é achado pelo horário de início (±15 min) e o time pelo nome (grafias da tabela Times ou palavras em comum). O Gemini escolhe até 3 desfalques por jogo, e `Selecionar jogos` descarta qualquer nome que não veio das fontes. Na mensagem eles aparecem numa linha 🚑, e no Airtable vão para a coluna `Desfalques` da tabela Jogos.
+- **A confirmar**: se a coluna `Desfalques` já existe na tabela Jogos do Airtable; se a credencial `API-Football` (Header Auth `x-apisports-key`) está criada no n8n; se o plano grátis da API-Football cobre a temporada atual das ligas (item aberto no ROADMAP); se houve um teste de ponta a ponta.
+- Não sobrescreva nem descarte esses arquivos. Antes de commitar, pergunte ao usuário se esse trabalho está terminado.
+
+---
+
+## Ambiente
+
+- **Windows 11**, pasta do projeto `D:\Bernard\projetos\telegram-daily-games-resume`. Shell principal: PowerShell 5.1 (também há Git Bash).
+- **n8n local** instalado em `D:\n8n`, rodando com o **Node 24 portátil** em `D:\n8n\runtime\node-v24.22.0-win-x64`. O Node 26 do sistema não é suportado pelo n8n.
+  - Subir: `.\start-n8n.ps1` na raiz do projeto, que abre em http://localhost:5678.
+  - O script carrega o `.env`, usa `.\.n8n` como pasta de dados (workflows, credenciais, SQLite; ignorada pelo git), define `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (libera `{{ $env.X }}` nos nós) e fixa o fuso `America/Sao_Paulo`.
+  - O gatilho das 7h só dispara com o PC ligado e o n8n rodando.
+- **`.env`** (nunca leia, nunca commite): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `FOOTBALL_DATA_TOKEN`, `GEMINI_API_KEY`, `AIRTABLE_TOKEN`, `AIRTABLE_BASE_ID`. O modelo está em `.env.example`.
+- **MCP do n8n (Claude Code)**: servidor `n8n-mcp` configurado em `~/.claude.json`, com `N8N_API_URL=http://localhost:5678`, a API key do n8n e `WEBHOOK_SECURITY_MODE=moderate`. Sem esse último, o n8n-mcp bloqueia webhooks em localhost. A variável só vale para processos novos: reconectar o MCP na mesma sessão não basta, e se o `n8n_health_check` falar em "strict mode", o processo é antigo.
+- **Codex**: para operar o n8n como o Claude faz, configure o mesmo `n8n-mcp` em `~/.codex/config.toml`. Sem MCP, edite os arquivos e peça ao usuário para aplicar no n8n pela interface (ou use a API REST do n8n com a API key, que o usuário precisa fornecer por variável de ambiente, nunca no chat).
+- **GitHub**: o `gh` está logado como `bernard-014`. Remoto `origin` = `https://github.com/bernard-014/pauta-de-jogos.git`.
+
+---
+
+## n8n
+
+### Workflows
+
+| Nome | ID | Observação |
+|---|---|---|
+| Pauta de Jogos | `Fb91kahwaHwrAQwV` | Fluxo principal, ativo. |
+| smoke-test-pauta | `smokeTestPauta01` | Testa as APIs. Inativo. |
+
+O n8n tem modelo rascunho/publicado. Em workflow ativo, as atualizações via `n8n_update_partial_workflow` foram publicadas na hora (confira com `n8n_get_workflow` no modo `active`).
+
+### Nós do fluxo principal (ordem lógica)
+
+1. `Schedule Trigger` (7h) e `When clicking 'Execute workflow'` (manual) → `Campeonatos`
+2. `Campeonatos` (Airtable search, filtro `{Ativo}`) → `Times` (Airtable search, `executeOnce`)
+3. `Times` → em paralelo, todos com `executeOnce`:
+   - `football-data` (HTTP, `api.football-data.org/v4/matches`, competições vindas da tabela Campeonatos com `Fonte = football-data`, de hoje até +2 dias)
+   - `ESPN` (Europa League: `site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa/scoreboard?dates=yyyyMMdd`)
+   - `ESPN NFL` (`.../football/nfl/scoreboard`)
+   - `ESPN NBA` (`.../basketball/nba/scoreboard`)
+   - _(em andamento)_ `ESPN NFL lesões`, `ESPN NBA lesões`, `API-Football lesões`
+   - Os nós ESPN e de lesões têm `onError: continueRegularOutput`: se falharem, o fluxo segue e a mensagem avisa.
+4. Todos → `Juntar fontes` (Merge v3.2, modo Append, `numberInputs` = número de fontes). **Toda fonte nova precisa entrar aqui, com `numberInputs` aumentado.** Sem o Merge, o nó seguinte rodaria uma vez por fonte e a pauta sairia repetida.
+5. `Montar jogos do dia` (Code) → `Ligas com classificação` (Code, `alwaysOutputData`) → `Classificação` (HTTP football-data standings, `onError: continue`) → `Preparar pedido ao Gemini` (Code) → `Gemini` (HTTP, retry a cada 5 s, `onError: continue`) → `Selecionar jogos` (Code)
+6. `Selecionar jogos` → `Separar jogos` (Code) → `Salvar no Airtable` (upsert na tabela Jogos pela coluna `ID`, `typecast: true`, auto-map)
+7. `Selecionar jogos` → `Montar mensagem` (Code) → `Send a text message` (Telegram, `parse_mode: HTML`)
+
+O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
+
+| Nó | Arquivo |
+|---|---|
+| Montar jogos do dia | `n8n/code/montar-jogos-do-dia.js` |
+| Ligas com classificação | `n8n/code/ligas-com-classificacao.js` |
+| Preparar pedido ao Gemini | `n8n/code/preparar-pedido-gemini.js` |
+| Selecionar jogos | `n8n/code/selecionar-jogos.js` |
+| Separar jogos | `n8n/code/separar-jogos-airtable.js` |
+| Montar mensagem | `n8n/code/montar-mensagem.js` |
+
+Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$('ESPN NBA')`...). **Renomear um nó quebra o código.**
+
+### Credenciais no n8n (nomes)
+
+- `Airtable - Pauta de Jogos` (Airtable Personal Access Token)
+- `football-data.org` (Header Auth `X-Auth-Token`)
+- `Gemini (header)` (Header Auth `x-goog-api-key`)
+- `Telegram - Resumo de Jogos` (Telegram API)
+- `API-Football` (Header Auth `x-apisports-key`; conferir se já existe, ver Trabalho em andamento)
+
+Para obter os IDs, leia um nó que usa a credencial (`n8n_get_workflow`, modo `filtered`).
+
+### n8n vivo × JSON do repositório
+
+`n8n/workflow-pauta-de-jogos.json` é uma exportação **higienizada**, feita para alguém importar:
+- no repositório, o Telegram usa `chatId = {{ $env.TELEGRAM_CHAT_ID }}`; no n8n vivo o chat está fixo no nó;
+- no repositório, o Airtable aponta a base por variável; no n8n vivo a base está selecionada na lista.
+
+Por isso, **nunca substitua o workflow vivo pelo JSON do repositório** (`n8n_update_full_workflow` com o arquivo). Aplique mudanças por diferença (`n8n_update_partial_workflow`: `addNode`, `updateNode` com `parameters.jsCode`, `addConnection` com `targetIndex` etc.) e mantenha o JSON do repositório sincronizado com os mesmos nós, conexões, posições e o `jsCode` dos arquivos em `n8n/code/`.
+
+### Procedimento padrão para mudar o fluxo
+
+1. Edite o arquivo em `n8n/code/` (ou o nó HTTP correspondente).
+2. Copie o código para o `jsCode` do nó em `n8n/workflow-pauta-de-jogos.json`. Um script Node que lê o JSON, troca o `jsCode` e grava com `JSON.stringify(wf, null, 2)` funciona bem.
+3. **Teste local** com dados reais (ver abaixo).
+4. Aplique no n8n com `n8n_update_partial_workflow` e rode `n8n_validate_workflow`. Os avisos de `executeOnce` são esperados.
+5. Atualize README, MANUAL, ROADMAP e **este arquivo**.
+6. Peça ao usuário para rodar o fluxo no n8n (manda mensagem real) e, depois, ofereça o commit.
+
+### Teste local dos nós Code
+
+Não há suíte de testes no repositório. O que funciona é um script descartável, fora do repositório (na pasta temporária do agente):
+- instale `luxon` (o n8n expõe `DateTime` do luxon);
+- simule `$` como `(nome) => ({ first: () => itens[nome][0], all: () => itens[nome] })`, alimentando `Campeonatos` e `Times` com os CSVs de `airtable/` e as fontes HTTP com respostas reais da ESPN (`curl` nas URLs acima, sem chave);
+- execute cada arquivo com `new Function('$', '$now', 'DateTime', codigo)($, DateTime.now(), DateTime)`, na mesma ordem do fluxo;
+- para o Gemini, simule uma falha (`{ error: ... }`): o fluxo cai na nota pelo peso, o que já testa o resto.
+
+### Lições aprendidas (n8n e ambiente)
+
+- Para apagar um workflow publicado, **despublique antes** (`deactivateWorkflow`).
+- `n8n_test_workflow` só dispara workflows com Webhook, Form ou Chat Trigger. O principal não tem, então quem roda é o usuário, pela interface.
+- O regex `/[̀-ͯ]/g` dos códigos usa caracteres combinantes literais (U+0300–U+036F). Ao mandar `jsCode` por JSON, pode usar `\u0300-\u036f`: o resultado é o mesmo.
+- No PowerShell 5.1, aspas dentro de here-string quebram o `git commit -m`. Grave a mensagem num arquivo e use `git commit -F arquivo`.
+- O n8n executa os ramos **um de cada vez** (`executionOrder: v1`). Ramos paralelos deixam o fluxo mais legível, não mais rápido.
+
+---
+
+## Airtable
+
+Base **Pauta de Jogos** (o ID não fica no repositório: está no `.env` e nos nós Airtable do n8n). Campos completos em [`docs/MANUAL.md#estrutura-do-airtable`](docs/MANUAL.md#estrutura-do-airtable).
+
+- **Campeonatos**: `Nome`, `Código` (código na API: `BSA`, `CLI`, `CL`, `PL`, `PD`, `SA`, `BL1`, `FL1`, `uefa.europa`, `nfl`, `nba`), `Fonte` (`football-data` | `ESPN`), `Bloco` (`Brasil` | `Copas` | `Europa` | `NFL` | `NBA`), `Todos os jogos`, `Limite nota 4`, `Ordem`, `Ativo`.
+- **Times**: `Nome`, `Peso` (3 gigante, 2 forte, 0 ou ausente = sem destaque), `Nomes nas APIs` (grafias separadas por vírgula). Futebol, NFL e NBA ficam **na mesma tabela**.
+- **Jogos**: `ID` (`fd-<id>` ou `espn-<id>`, chave do upsert), `Data` (dia da pauta), `Horário`, `Campeonato` (link), `Mandante`, `Visitante`, `Status`, `Nota`, `Por que a nota`, `Briefing`, `Desfalques` (em andamento).
+
+Os CSVs em `airtable/` espelham o que foi carregado: `campeonatos.csv`, `times.csv` (45 de futebol), `times-nfl.csv` (32), `times-nba.csv` (30).
+
+### Como escrever no Airtable
+
+Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` que gera os registros → `Airtable` com operação **upsert**, `typecast: true`, `matchingColumns` = `Código` ou `Nome`, usando a credencial `Airtable - Pauta de Jogos` e os IDs de base e tabela lidos dos nós do fluxo principal). Depois: ative, dispare com `n8n_test_workflow`, confira a execução com `n8n_executions`, desative e apague. Como é upsert, rodar duas vezes não duplica. O `typecast: true` cria opções novas em campos de seleção (foi assim que `NFL` e `NBA` entraram no `Bloco`). **Campos novos** (colunas) não podem ser criados assim: peça ao usuário para criar no Airtable.
+
+---
+
+## Fontes de dados
+
+| Fonte | Uso | Observações |
+|---|---|---|
+| football-data.org (free) | Jogos e classificação do futebol | Cobre BSA, CLI, CL, PL, PD, SA, BL1, FL1. **Não cobre Europa League** no plano grátis. Limite de 10 req/min. |
+| ESPN (pública, sem chave) | Europa League, NFL, NBA, lesões NFL/NBA | `site.api.espn.com/apis/site/v2/sports/<esporte>/<liga>/scoreboard?dates=yyyyMMdd`. O código do campeonato no Airtable é o slug da liga (`uefa.europa`, `nfl`, `nba`). O placar já traz campanha (`records`), semana (NFL), fase (`leagues[0].season.type.name`: Preseason, Regular Season...), TV e local. |
+| API-Football (free, 100 req/dia) | Lesões do futebol (em andamento) | `v3.football.api-sports.io/injuries?date=...`, header `x-apisports-key`. |
+| Gemini | Nota, motivo, briefing, desfalques | Modelo `gemini-flash-lite-latest`: os `flash` maiores deram erro 503 de alta demanda em 2026-10-16. Uma chamada por dia com todos os jogos, resposta em JSON com `responseSchema`. |
+| Telegram Bot API | Envio da pauta | HTML, limite de 4096 caracteres por mensagem (o código corta em 3900). |
+
+---
+
+## Regras de negócio
+
+- **Janela da pauta**: de **hoje às 6h até amanhã às 6h** (horário de Brasília), para que jogos da NBA depois da meia-noite entrem na pauta certa. A `Data` gravada no Airtable é o dia da pauta.
+- **Seleção** (`selecionar-jogos.js`): campeonato com `Todos os jogos` marcado (Brasileirão, Libertadores) → entra tudo. Nos demais, nota 5 entra sempre e nota 4 entra até o `Limite nota 4` (CL 4, PL 3, NFL 3, NBA 3, demais 2), desempatando pelo peso total e pelo horário.
+- **Notas** (prompt em `preparar-pedido-gemini.js`): critérios explícitos para futebol, NFL (horário nobre, jogo fora dos EUA, playoff, campanhas fortes) e NBA (clássicos, jogo fora dos EUA, playoff; **pré-temporada vale no máximo 4**). O modelo não pode inventar escalações, resultados ou lesões.
+- **Se o Gemini falhar**: nota pelo peso dos times (`pesoTotal >= 5` → 5; `>= 4` ou um time peso 3 → 4; `>= 2` → 3; senão 2), sem briefing, com aviso na mensagem.
+- **Pesos dos times**: no futebol, gigantes = 3 e fortes = 2. Na NFL, 3 para Cowboys, Packers, Chiefs, Patriots, Steelers e 49ers. Na NBA, os pesos misturam história, popularidade no Brasil e força até 2025-26: 3 para Lakers, Celtics, Warriors, Bulls, Knicks, Heat, Spurs e Thunder. **Revisar a NBA no início da temporada regular.**
+- **Nomes repetidos entre esportes**: as grafias da tabela Times formam um mapa único. `Spurs` fica só no **Tottenham**; o San Antonio usa só `San Antonio Spurs` (o código tenta o nome completo primeiro). Antes de cadastrar um apelido curto, confira se ele já existe em outro esporte.
+- **Mensagem**: uma só, com blocos na ordem Brasil, Copas, Europa, NFL, NBA (🇧🇷 🏆 🌍 🏈 🏀). O subtítulo do campeonato some quando repete o nome do bloco. Selos: 🔥 nota 5, ⭐ nota 4, ▫️ demais.
+
+---
+
+## Pendências (fora do código)
+
+- Decidir a conta do GitHub: o currículo linka `bernardfrajblat365`, mas o repositório está em `bernard-014` (transferir?). Depois, tornar o repositório **público**.
+- Gravar um vídeo de 2 minutos (Loom ou OBS) e pôr o link no README.
+- Prints do n8n e do Telegram para o README.
+- Testar a importação do JSON exportado num n8n limpo.
+- Adicionar o projeto ao currículo.
+- Itens abertos do [`ROADMAP.md`](ROADMAP.md).
+
+---
+
+## Registro de mudanças
+
+Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
+
+- **2026-10-16, Claude Code**: criados este `AGENTS.md` e o `CLAUDE.md` (que importa este arquivo), com a regra de mantê-lo atualizado a cada tarefa. Registrado o trabalho de desfalques, que outra sessão deixou em andamento sem commit.
+- **2026-10-16, Claude Code**: commit `69c64a4` na `main` (push feito): NFL e NBA (nós ESPN, 32 + 30 times, linhas em Campeonatos), fontes em paralelo com o Merge `Juntar fontes`, janela da pauta 6h–6h, mensagem única no Telegram, `Data` = dia da pauta. Tudo aplicado no n8n e no Airtable. Teste do usuário no n8n: OK (antes da mensagem única, que só foi testada localmente).
+- **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques via ESPN e API-Football. Publicado no n8n, **não commitado** (ver Trabalho em andamento).
+- **2026-10-16, Claude Code**: commit `3fd1a48`: primeira versão (futebol, Airtable, Gemini, Telegram), repositório criado no GitHub.
+- **2026-10-15**: início do projeto.
