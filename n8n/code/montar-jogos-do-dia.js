@@ -169,26 +169,25 @@ const desfalque = (nome, posicao, status, motivo) => ({
 const prioridade = (d) => (/lesionados|temporada/.test(d.texto) ? 2 : d.fora ? 0 : 1);
 const ordenar = (lista) => [...lista].sort((a, b) => prioridade(a) - prioridade(b)).slice(0, MAX_POR_TIME);
 
-// ESPN (NFL e NBA): uma chamada traz a liga inteira, agrupada por time. O id do time é o mesmo do placar.
-const lesoesESPN = (no, liga) => {
-  const resposta = $(no).first().json;
-  for (const time of resposta.injuries ?? []) {
-    const lista = (time.injuries ?? [])
-      .filter((l) => l.status && l.status !== 'Active')
-      .map((l) => {
-        const status = statusEmPortugues[l.status] ?? l.status.toLowerCase();
-        const motivo = [l.details?.type, l.details?.detail].filter((d) => d && d !== 'Not Specified').join(' ');
-        return desfalque(l.athlete?.displayName, l.athlete?.position?.abbreviation, status, motivo);
-      });
+// ESPN (NFL e NBA): o nó "Lesões ESPN" já entrega a liga inteira enxuta, agrupada por time.
+// O id do time é o mesmo do placar.
+const lesoesESPN = (liga) => {
+  const times = $('Lesões ESPN').first().json[liga];
+  for (const time of times ?? []) {
+    const lista = time.injuries.map((l) => {
+      const status = statusEmPortugues[l.status] ?? l.status.toLowerCase();
+      const motivo = [l.tipo, l.detalhe].filter((d) => d && d !== 'Not Specified').join(' ');
+      return desfalque(l.nome, l.posicao, status, motivo);
+    });
     for (const j of jogos.filter((x) => x.codigo === liga)) {
       if (String(j.idMandante) === String(time.id)) j.desfalquesMandante = ordenar(lista);
       if (String(j.idVisitante) === String(time.id)) j.desfalquesVisitante = ordenar(lista);
     }
   }
-  return !resposta.injuries;
+  return !times;
 };
-const nflLesoesFalhou = jogos.some((j) => j.codigo === 'nfl') && lesoesESPN('ESPN NFL lesões', 'nfl');
-const nbaLesoesFalhou = jogos.some((j) => j.codigo === 'nba') && lesoesESPN('ESPN NBA lesões', 'nba');
+const nflLesoesFalhou = jogos.some((j) => j.codigo === 'nfl') && lesoesESPN('nfl');
+const nbaLesoesFalhou = jogos.some((j) => j.codigo === 'nba') && lesoesESPN('nba');
 
 // API-Football (futebol): a chamada traz os desfalques de todos os jogos do dia, no mundo inteiro.
 // Os ids não batem com os da football-data/ESPN, então o jogo é achado pelo horário de início

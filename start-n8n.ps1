@@ -29,5 +29,9 @@ $env:GENERIC_TIMEZONE = 'America/Sao_Paulo' # horário do Schedule Trigger
 $env:TZ = 'America/Sao_Paulo'
 $env:N8N_RUNNERS_ENABLED = 'true'
 $env:N8N_DIAGNOSTICS_ENABLED = 'false'
+# Histórico de execuções: apaga sozinho o que tiver mais de 7 dias e devolve o espaço do SQLite ao iniciar
+$env:EXECUTIONS_DATA_PRUNE = 'true'
+$env:EXECUTIONS_DATA_MAX_AGE = '168'          # em horas
+$env:DB_SQLITE_VACUUM_ON_STARTUP = 'true'
 
 & (Join-Path $nodeDir 'node.exe') (Join-Path $n8nDir 'node_modules\n8n\bin\n8n') $n8nArgs

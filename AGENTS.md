@@ -53,7 +53,7 @@ _Última atualização: 2026-10-16, Claude Code._
 | Fontes em paralelo + Merge "Juntar fontes" | Pronto, commitado. |
 | Mensagem única no Telegram | Pronto, commitado. Só divide acima de 4096 caracteres. |
 | Janela da pauta 6h–6h | Pronto, commitado. |
-| Desfalques (lesões/suspensões) | Commitado na branch `desfalques` (falta juntar na `main` e fazer push). Publicado no n8n; coluna `Desfalques` criada no Airtable. NFL/NBA testados localmente com dados reais da ESPN e o Gemini real; **futebol só com resposta simulada**: falta o usuário criar a chave e a credencial `API-Football` no n8n e rodar o nó. |
+| Desfalques (lesões/suspensões) | Commitado na branch `desfalques` (falta juntar na `main` e fazer push). Lesões da ESPN enxugadas no nó Code `Lesões ESPN`. Publicado no n8n; coluna `Desfalques` criada no Airtable. NFL/NBA testados localmente com dados reais da ESPN e o Gemini real; **futebol só com resposta simulada**: falta o usuário criar a chave e a credencial `API-Football` no n8n e rodar o nó. |
 | Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` em `69c64a4` no último push. |
 
 ### Trabalho em andamento
@@ -68,6 +68,7 @@ _Nada em andamento._
 - **n8n local** instalado em `D:\n8n`, rodando com o **Node 24 portátil** em `D:\n8n\runtime\node-v24.22.0-win-x64`. O Node 26 do sistema não é suportado pelo n8n.
   - Subir: `.\start-n8n.ps1` na raiz do projeto, que abre em http://localhost:5678.
   - O script carrega o `.env`, usa `.\.n8n` como pasta de dados (workflows, credenciais, SQLite; ignorada pelo git), define `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (libera `{{ $env.X }}` nos nós) e fixa o fuso `America/Sao_Paulo`.
+  - O script também liga a limpeza do histórico: `EXECUTIONS_DATA_PRUNE=true`, `EXECUTIONS_DATA_MAX_AGE=168` (7 dias) e `DB_SQLITE_VACUUM_ON_STARTUP=true`. Só valem depois de reiniciar o n8n pelo script.
   - O gatilho das 7h só dispara com o PC ligado e o n8n rodando.
 - **`.env`** (nunca leia, nunca commite): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `FOOTBALL_DATA_TOKEN`, `GEMINI_API_KEY`, `AIRTABLE_TOKEN`, `AIRTABLE_BASE_ID`. O modelo está em `.env.example`.
 - **MCP do n8n (Claude Code)**: servidor `n8n-mcp` configurado em `~/.claude.json`, com `N8N_API_URL=http://localhost:5678`, a API key do n8n e `WEBHOOK_SECURITY_MODE=moderate`. Sem esse último, o n8n-mcp bloqueia webhooks em localhost. A variável só vale para processos novos: reconectar o MCP na mesma sessão não basta, e se o `n8n_health_check` falar em "strict mode", o processo é antigo.
@@ -96,7 +97,7 @@ O n8n tem modelo rascunho/publicado. Em workflow ativo, as atualizações via `n
    - `ESPN` (Europa League: `site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa/scoreboard?dates=yyyyMMdd`)
    - `ESPN NFL` (`.../football/nfl/scoreboard`)
    - `ESPN NBA` (`.../basketball/nba/scoreboard`)
-   - `ESPN NFL lesões` (`.../football/nfl/injuries`) e `ESPN NBA lesões` (`.../basketball/nba/injuries`): a liga inteira numa chamada, sem chave. A da NFL tem ~9 MB.
+   - `Lesões ESPN` (**Code**, não HTTP): busca `.../football/nfl/injuries` e `.../basketball/nba/injuries` com `this.helpers.httpRequest` e devolve `{ nfl: [...], nba: [...] }` só com nome, posição, status e motivo (~45 KB). A resposta crua da NFL tem ~9 MB; num nó HTTP ela iria inteira para o histórico de execuções. `this.helpers.httpRequest` funciona no nó Code deste n8n (testado em 2026-10-16 com os task runners ligados).
    - `API-Football lesões` (`v3.football.api-sports.io/injuries?date=hoje&timezone=America/Sao_Paulo`, credencial `API-Football`)
    - Os nós ESPN e de lesões têm `onError: continueRegularOutput`: se falharem, o fluxo segue e a mensagem avisa.
 4. Todos → `Juntar fontes` (Merge v3.2, modo Append, `numberInputs` = número de fontes). **Toda fonte nova precisa entrar aqui, com `numberInputs` aumentado.** Sem o Merge, o nó seguinte rodaria uma vez por fonte e a pauta sairia repetida.
@@ -114,6 +115,7 @@ O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
 | Selecionar jogos | `n8n/code/selecionar-jogos.js` |
 | Separar jogos | `n8n/code/separar-jogos-airtable.js` |
 | Montar mensagem | `n8n/code/montar-mensagem.js` |
+| Lesões ESPN | `n8n/code/lesoes-espn.js` |
 
 Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$('ESPN NBA')`...). **Renomear um nó quebra o código.**
 
@@ -218,6 +220,7 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
 
+- **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: os nós HTTP `ESPN NFL lesões` e `ESPN NBA lesões` viraram o nó Code `Lesões ESPN`, que devolve ~45 KB em vez de ~10 MB (`Juntar fontes` com 6 entradas). Limpeza automática de execuções no `start-n8n.ps1`. Aplicado no n8n e commitado na branch `desfalques`. Pendente: o usuário reiniciar o n8n pelo script para a limpeza valer.
 - **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques commitados na branch `desfalques` (README, MANUAL, ROADMAP, códigos e JSON). Coluna `Desfalques` criada na tabela Jogos pela API de metadados do Airtable. Pendente: juntar na `main` e push; credencial `API-Football` e teste do usuário no n8n.
 - **2026-10-16, Claude Code**: criados este `AGENTS.md` e o `CLAUDE.md` (que importa este arquivo), com a regra de mantê-lo atualizado a cada tarefa. Registrado o trabalho de desfalques, que outra sessão deixou em andamento sem commit.
 - **2026-10-16, Claude Code**: commit `69c64a4` na `main` (push feito): NFL e NBA (nós ESPN, 32 + 30 times, linhas em Campeonatos), fontes em paralelo com o Merge `Juntar fontes`, janela da pauta 6h–6h, mensagem única no Telegram, `Data` = dia da pauta. Tudo aplicado no n8n e no Airtable. Teste do usuário no n8n: OK (antes da mensagem única, que só foi testada localmente).
