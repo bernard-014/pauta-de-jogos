@@ -38,6 +38,18 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 - [x] Lesionados e suspensos de cada time: ESPN para NFL e NBA, API-Football para futebol. O Gemini escolhe até 3 que importam, e eles aparecem na linha 🚑 e na coluna *Desfalques* do Airtable.
 - [ ] Conferir com a chave real se o plano grátis da API-Football cobre a temporada atual de todas as ligas da pauta (o endpoint `/leagues` traz `coverage.injuries`).
 
+## Transmissão (onde passa o jogo)
+- [x] Mostrar os canais brasileiros de cada jogo selecionado (linha 📺 na mensagem e coluna *Transmissão* no Airtable). Feito em 16/10/2026: nós **Pedidos 365Scores**, **365Scores jogos**, **Casar transmissões**, **365Scores transmissão** e **Adicionar transmissão**.
+- [x] Conferido na execução real 31 do n8n (testado localmente com a pauta de 16/10 e com 30 jogos de domingo, 18/10: todos casaram).
+- [ ] Revisar a NBA na temporada regular (na pré-temporada quase nenhum jogo tem canal).
+- Fonte testada em 16/10/2026: API pública (não documentada) do site da 365Scores, sem chave.
+  - Lista do dia: `webws.365scores.com/web/games/allscores/?appTypeId=5&langId=31&timezoneName=America/Sao_Paulo&userCountryId=21&sports=<1 futebol | 2 basquete | 6 futebol americano>&startDate=dd/MM/yyyy&endDate=dd/MM/yyyy` (~660 KB no futebol). Cada jogo traz `hasTVNetworks`, mas não os canais.
+  - Detalhe do jogo: `webws.365scores.com/web/game/?appTypeId=5&langId=31&timezoneName=America/Sao_Paulo&userCountryId=21&gameId=<id>` (~46 KB), com `game.tvNetworks[].name` (ex.: Premiere, SporTV, DAZN, GETV). `userCountryId=21` = Brasil.
+  - Matching: ids não batem com football-data/ESPN; casar por horário (±15 min) + nome dos times, como já é feito com a API-Football.
+  - Encaixe: depois de `Selecionar jogos`, só para os selecionados (1 chamada de lista por esporte + 1 de detalhe por jogo com `hasTVNetworks`). Não depende do Gemini.
+  - Risco: API não oficial, pode mudar sem aviso. Se falhar, a pauta sai sem a linha 📺.
+  - NBA na pré-temporada veio sem transmissão; NFL e futebol vieram com canais.
+
 ## Outras ideias
 - [ ] Formulário do Airtable para a equipe marcar "quero cobertura deste jogo", com aviso automático no Telegram.
 - [ ] Rodar o n8n em um servidor gratuito para o gatilho das 7h não depender do PC ligado.

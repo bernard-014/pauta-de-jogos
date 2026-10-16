@@ -2,7 +2,7 @@
 // Transforma a lista de jogos escolhidos em um item por jogo,
 // com as chaves iguais aos nomes das colunas da tabela Jogos no Airtable.
 
-const { data, jogos } = $('Selecionar jogos').first().json;
+const { data, jogos } = $('Adicionar transmissão').first().json;
 
 return jogos.map((j) => ({
   json: {
@@ -17,5 +17,6 @@ return jogos.map((j) => ({
     'Por que a nota': j.motivo,
     Briefing: j.briefing,
     Desfalques: j.desfalques,
+    'Transmissão': j.transmissao,
   },
 }));

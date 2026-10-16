@@ -3,7 +3,7 @@
 // O Telegram aceita até 4096 caracteres por mensagem; só se passar disso o texto é dividido em mais de uma.
 
 const LIMITE = 3900;
-const { data, jogos, llmFalhou, totalAnalisados } = $('Selecionar jogos').first().json;
+const { data, jogos, llmFalhou, totalAnalisados, transmissaoFalhou } = $('Adicionar transmissão').first().json;
 const { espnFalhou, nflFalhou, nbaFalhou, nflLesoesFalhou, nbaLesoesFalhou, erroFutebol } = $('Montar jogos do dia').first().json;
 
 const html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -29,6 +29,7 @@ if (nflFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NFL podem 
 if (nbaFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NBA podem estar faltando.');
 if (nflLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NFL: desfalques ficaram de fora.');
 if (nbaLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NBA: desfalques ficaram de fora.');
+if (transmissaoFalhou) avisos.push('⚠️ A 365Scores não respondeu: a transmissão dos jogos ficou de fora.');
 if (erroFutebol) avisos.push(`⚠️ API-Football falhou (${html(erroFutebol.slice(0, 150))}): desfalques do futebol ficaram de fora.`);
 
 const mensagens = [];
@@ -52,6 +53,7 @@ for (const bloco of blocos) {
       campeonatoAtual = j.campeonato;
     }
     linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);
+    if (j.transmissao) linhas.push(`📺 ${html(j.transmissao)}`);
     if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);
     if (j.desfalques) linhas.push(`🚑 ${html(j.desfalques)}`);
     adicionar(linhas.join('\n'));

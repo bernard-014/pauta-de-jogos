@@ -25,7 +25,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        2672,
+        3808,
         16
       ],
       "id": "3a8d2756-d24d-417f-81a9-2057703b9ac7",
@@ -334,12 +334,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Nó Code \"Separar jogos\" (modo: Run Once for All Items)\r\n// Transforma a lista de jogos escolhidos em um item por jogo,\r\n// com as chaves iguais aos nomes das colunas da tabela Jogos no Airtable.\r\n\r\nconst { data, jogos } = $('Selecionar jogos').first().json;\r\n\r\nreturn jogos.map((j) => ({\r\n  json: {\r\n    ID: j.id,\r\n    Data: data, // dia da pauta (um jogo às 00h30 continua na pauta de ontem)\r\n    'Horário': j.horarioISO,\r\n    Campeonato: [j.campeonatoId],\r\n    Mandante: j.mandante,\r\n    Visitante: j.visitante,\r\n    Status: j.status,\r\n    Nota: j.nota,\r\n    'Por que a nota': j.motivo,\r\n    Briefing: j.briefing,\r\n    Desfalques: j.desfalques,\r\n  },\r\n}));\r\n"
+        "jsCode": "// Nó Code \"Separar jogos\" (modo: Run Once for All Items)\r\n// Transforma a lista de jogos escolhidos em um item por jogo,\r\n// com as chaves iguais aos nomes das colunas da tabela Jogos no Airtable.\r\n\r\nconst { data, jogos } = $('Adicionar transmissão').first().json;\r\n\r\nreturn jogos.map((j) => ({\r\n  json: {\r\n    ID: j.id,\r\n    Data: data, // dia da pauta (um jogo às 00h30 continua na pauta de ontem)\r\n    'Horário': j.horarioISO,\r\n    Campeonato: [j.campeonatoId],\r\n    Mandante: j.mandante,\r\n    Visitante: j.visitante,\r\n    Status: j.status,\r\n    Nota: j.nota,\r\n    'Por que a nota': j.motivo,\r\n    Briefing: j.briefing,\r\n    Desfalques: j.desfalques,\n    'Transmissão': j.transmissao,\r\n  },\r\n}));\r\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2480,
+        3584,
         -176
       ],
       "id": "549abebf-f313-4f3b-bebc-0a2268173f4f",
@@ -518,7 +518,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.2,
       "position": [
-        2672,
+        3808,
         -176
       ],
       "id": "9085abf2-b4eb-42fb-b67d-3cdb6e86bc27",
@@ -532,12 +532,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// Nó Code \"Montar mensagem\" (modo: Run Once for All Items)\r\n// Monta o resumo do dia em HTML do Telegram: uma mensagem só, separada por blocos (Brasil, Copas, Europa, NFL, NBA).\r\n// O Telegram aceita até 4096 caracteres por mensagem; só se passar disso o texto é dividido em mais de uma.\r\n\r\nconst LIMITE = 3900;\r\nconst { data, jogos, llmFalhou, totalAnalisados } = $('Selecionar jogos').first().json;\r\nconst { espnFalhou, nflFalhou, nbaFalhou, nflLesoesFalhou, nbaLesoesFalhou, erroFutebol } = $('Montar jogos do dia').first().json;\r\n\r\nconst html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\r\nconst selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');\r\nconst dia = DateTime.fromISO(data).setLocale('pt-BR').toFormat(\"cccc, dd/MM\");\r\n\r\nconst blocos = [\r\n  { nome: 'Brasil', titulo: '🇧🇷 <b>BRASIL</b>' },\r\n  { nome: 'Copas', titulo: '🏆 <b>COPAS</b>' },\r\n  { nome: 'Europa', titulo: '🌍 <b>EUROPA</b>' },\r\n  { nome: 'NFL', titulo: '🏈 <b>NFL</b>' },\r\n  { nome: 'NBA', titulo: '🏀 <b>NBA</b>' },\r\n];\r\n\r\nconst cabecalho = jogos.length\r\n  ? `📅 <b>Pauta de hoje: ${html(dia)}</b>\\n${jogos.length} de ${totalAnalisados} jogos selecionados · 🔥 jogão · ⭐ bom jogo`\r\n  : `📅 <b>Pauta de hoje: ${html(dia)}</b>\\nHoje não tem jogos dos campeonatos acompanhados.`;\r\n\r\nconst avisos = [];\r\nif (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculadas pelo peso dos times, sem briefing.');\r\nif (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');\r\nif (nflFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NFL podem estar faltando.');\r\nif (nbaFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NBA podem estar faltando.');\r\nif (nflLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NFL: desfalques ficaram de fora.');\r\nif (nbaLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NBA: desfalques ficaram de fora.');\r\nif (erroFutebol) avisos.push(`⚠️ API-Football falhou (${html(erroFutebol.slice(0, 150))}): desfalques do futebol ficaram de fora.`);\r\n\r\nconst mensagens = [];\r\nlet atual = cabecalho;\r\nconst fechar = () => { if (atual.trim()) mensagens.push(atual); atual = ''; };\r\nconst adicionar = (trecho) => {\r\n  if (atual && (atual + '\\n\\n' + trecho).length > LIMITE) fechar();\r\n  atual = atual ? `${atual}\\n\\n${trecho}` : trecho;\r\n};\r\n\r\nfor (const bloco of blocos) {\r\n  const doBloco = jogos.filter((j) => j.bloco === bloco.nome);\r\n  if (!doBloco.length) continue;\r\n  adicionar(bloco.titulo);\r\n  let campeonatoAtual = null;\r\n  for (const j of doBloco) {\r\n    const linhas = [];\r\n    // Subtítulo do campeonato, menos quando repete o nome do bloco (NFL, NBA)\r\n    if (j.campeonato !== campeonatoAtual) {\r\n      if (j.campeonato !== bloco.nome) linhas.push(`<u>${html(j.campeonato)}</u>`);\r\n      campeonatoAtual = j.campeonato;\r\n    }\r\n    linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);\r\n    if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);\r\n    if (j.desfalques) linhas.push(`🚑 ${html(j.desfalques)}`);\r\n    adicionar(linhas.join('\\n'));\r\n  }\r\n}\r\nif (avisos.length) adicionar(avisos.join('\\n'));\r\nfechar();\r\n\r\nreturn mensagens.map((texto) => ({ json: { texto } }));\r\n"
+        "jsCode": "// Nó Code \"Montar mensagem\" (modo: Run Once for All Items)\r\n// Monta o resumo do dia em HTML do Telegram: uma mensagem só, separada por blocos (Brasil, Copas, Europa, NFL, NBA).\r\n// O Telegram aceita até 4096 caracteres por mensagem; só se passar disso o texto é dividido em mais de uma.\r\n\r\nconst LIMITE = 3900;\r\nconst { data, jogos, llmFalhou, totalAnalisados, transmissaoFalhou } = $('Adicionar transmissão').first().json;\r\nconst { espnFalhou, nflFalhou, nbaFalhou, nflLesoesFalhou, nbaLesoesFalhou, erroFutebol } = $('Montar jogos do dia').first().json;\r\n\r\nconst html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\r\nconst selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');\r\nconst dia = DateTime.fromISO(data).setLocale('pt-BR').toFormat(\"cccc, dd/MM\");\r\n\r\nconst blocos = [\r\n  { nome: 'Brasil', titulo: '🇧🇷 <b>BRASIL</b>' },\r\n  { nome: 'Copas', titulo: '🏆 <b>COPAS</b>' },\r\n  { nome: 'Europa', titulo: '🌍 <b>EUROPA</b>' },\r\n  { nome: 'NFL', titulo: '🏈 <b>NFL</b>' },\r\n  { nome: 'NBA', titulo: '🏀 <b>NBA</b>' },\r\n];\r\n\r\nconst cabecalho = jogos.length\r\n  ? `📅 <b>Pauta de hoje: ${html(dia)}</b>\\n${jogos.length} de ${totalAnalisados} jogos selecionados · 🔥 jogão · ⭐ bom jogo`\r\n  : `📅 <b>Pauta de hoje: ${html(dia)}</b>\\nHoje não tem jogos dos campeonatos acompanhados.`;\r\n\r\nconst avisos = [];\r\nif (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculadas pelo peso dos times, sem briefing.');\r\nif (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');\r\nif (nflFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NFL podem estar faltando.');\r\nif (nbaFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NBA podem estar faltando.');\r\nif (nflLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NFL: desfalques ficaram de fora.');\r\nif (nbaLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NBA: desfalques ficaram de fora.');\r\nif (transmissaoFalhou) avisos.push('⚠️ A 365Scores não respondeu: a transmissão dos jogos ficou de fora.');\nif (erroFutebol) avisos.push(`⚠️ API-Football falhou (${html(erroFutebol.slice(0, 150))}): desfalques do futebol ficaram de fora.`);\r\n\r\nconst mensagens = [];\r\nlet atual = cabecalho;\r\nconst fechar = () => { if (atual.trim()) mensagens.push(atual); atual = ''; };\r\nconst adicionar = (trecho) => {\r\n  if (atual && (atual + '\\n\\n' + trecho).length > LIMITE) fechar();\r\n  atual = atual ? `${atual}\\n\\n${trecho}` : trecho;\r\n};\r\n\r\nfor (const bloco of blocos) {\r\n  const doBloco = jogos.filter((j) => j.bloco === bloco.nome);\r\n  if (!doBloco.length) continue;\r\n  adicionar(bloco.titulo);\r\n  let campeonatoAtual = null;\r\n  for (const j of doBloco) {\r\n    const linhas = [];\r\n    // Subtítulo do campeonato, menos quando repete o nome do bloco (NFL, NBA)\r\n    if (j.campeonato !== campeonatoAtual) {\r\n      if (j.campeonato !== bloco.nome) linhas.push(`<u>${html(j.campeonato)}</u>`);\r\n      campeonatoAtual = j.campeonato;\r\n    }\r\n    linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);\r\n    if (j.transmissao) linhas.push(`📺 ${html(j.transmissao)}`);\n    if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);\r\n    if (j.desfalques) linhas.push(`🚑 ${html(j.desfalques)}`);\r\n    adicionar(linhas.join('\\n'));\r\n  }\r\n}\r\nif (avisos.length) adicionar(avisos.join('\\n'));\r\nfechar();\r\n\r\nreturn mensagens.map((texto) => ({ json: { texto } }));\r\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2480,
+        3584,
         16
       ],
       "id": "a6cdfae2-d132-4d04-b135-89721b152cd0",
@@ -629,6 +629,139 @@
           "id": "",
           "name": "API-Football"
         }
+      }
+    },
+    {
+      "id": "67296bd8-6f8f-4ed7-af13-dc3d3d9e507e",
+      "name": "Pedidos 365Scores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        -96
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "jsCode": "// Nó Code \"Pedidos 365Scores\" (modo: Run Once for All Items)\n// Gera um pedido à lista de jogos da 365Scores para cada esporte que tem jogo selecionado na pauta.\n// A 365Scores separa por esporte: 1 = futebol, 2 = basquete, 6 = futebol americano.\n// A pauta vai de hoje às 6h até amanhã às 6h, então a busca cobre os dois dias.\n// Ligue \"Always Output Data\" nas Settings: assim o fluxo segue até a mensagem mesmo sem jogo selecionado.\n\nconst { data, jogos } = $('Selecionar jogos').first().json;\nconst ESPORTE_365 = { nfl: 6, nba: 2 }; // os demais campeonatos são de futebol\n\nconst dia = DateTime.fromISO(data);\nconst esportes = new Set(jogos.map((j) => ESPORTE_365[j.codigo] ?? 1));\n\nreturn [...esportes].map((esporte) => ({\n  json: {\n    esporte,\n    inicio: dia.toFormat('dd/MM/yyyy'),\n    fim: dia.plus({ days: 1 }).toFormat('dd/MM/yyyy'),\n  },\n}));\n"
+      }
+    },
+    {
+      "id": "f294d539-4ecf-42b5-a81a-275b3224fac4",
+      "name": "365Scores jogos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2688,
+        -96
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "https://webws.365scores.com/web/games/allscores/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "appTypeId",
+              "value": "5"
+            },
+            {
+              "name": "langId",
+              "value": "31"
+            },
+            {
+              "name": "timezoneName",
+              "value": "America/Sao_Paulo"
+            },
+            {
+              "name": "userCountryId",
+              "value": "21"
+            },
+            {
+              "name": "sports",
+              "value": "={{ $json.esporte }}"
+            },
+            {
+              "name": "startDate",
+              "value": "={{ $json.inicio }}"
+            },
+            {
+              "name": "endDate",
+              "value": "={{ $json.fim }}"
+            },
+            {
+              "name": "showOdds",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5a20d453-e301-4106-8fb7-fb5ff9e10612",
+      "name": "Casar transmissões",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        -96
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "jsCode": "// Nó Code \"Casar transmissões\" (modo: Run Once for All Items)\n// Acha cada jogo selecionado na lista da 365Scores. Os ids não batem com os da football-data/ESPN,\n// então o jogo é achado pelo esporte, pelo horário de início (±15 min) e pelo nome dos times\n// (grafias da tabela Times ou palavras em comum, a mesma regra usada com a API-Football).\n// Só sai um item por jogo que a 365Scores marca com transmissão (hasTVNetworks): os canais vêm no nó seguinte.\n// Ligue \"Always Output Data\" nas Settings: sem nenhum jogo casado, o fluxo segue até a mensagem.\n\nconst { jogos } = $('Selecionar jogos').first().json;\nconst ESPORTE_365 = { nfl: 6, nba: 2 };\nconst TOLERANCIA = 15 * 60 * 1000;\n\nconst campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });\nconst semAcento = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();\nconst times = new Map();\nfor (const t of $('Times').all().map(campos)) {\n  for (const nome of (t['Nomes nas APIs'] ?? '').split(',')) {\n    if (nome.trim()) times.set(semAcento(nome), t.Nome);\n  }\n}\n\nconst GENERICAS = new Set(['fc', 'cf', 'ac', 'sc', 'afc', 'cd', 'ca', 'ec', 'se', 'rc', 'ssc', 'as', 'club', 'clube', 'de', 'da', 'do', 'the', 'calcio', 'futebol', 'football', 'esporte']);\nconst palavras = (s) => semAcento(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((p) => p.length > 1 && !GENERICAS.has(p));\nconst parecido = (nomeApi, nomes) => {\n  const canonico = times.get(semAcento(nomeApi));\n  if (canonico && nomes.includes(canonico)) return 1;\n  const a = palavras(nomeApi);\n  let melhor = 0;\n  for (const n of nomes) {\n    const b = palavras(n);\n    if (!a.length || !b.length) continue;\n    const comuns = a.filter((p) => b.some((q) => p === q || (Math.min(p.length, q.length) >= 3 && (p.startsWith(q) || q.startsWith(p)))));\n    melhor = Math.max(melhor, comuns.length / Math.min(a.length, b.length));\n  }\n  return melhor;\n};\n\nconst lista = $('365Scores jogos').all().flatMap((i) => i.json.games ?? []);\n\nconst casados = [];\nfor (const j of jogos) {\n  const esporte = ESPORTE_365[j.codigo] ?? 1;\n  const inicio = DateTime.fromISO(j.utc).toMillis();\n  let melhor = null;\n  let pontos = 0;\n  for (const g of lista) {\n    if (g.sportId !== esporte) continue;\n    if (Math.abs(DateTime.fromISO(g.startTime).toMillis() - inicio) > TOLERANCIA) continue;\n    const casa = g.homeCompetitor?.name;\n    const fora = g.awayCompetitor?.name;\n    // Soma dos dois times; testa também invertido, caso uma fonte troque mandante e visitante\n    const p = Math.max(\n      parecido(casa, j.nomesMandante) + parecido(fora, j.nomesVisitante),\n      parecido(casa, j.nomesVisitante) + parecido(fora, j.nomesMandante),\n    );\n    if (p > pontos) { melhor = g; pontos = p; }\n  }\n  // Pelo menos um time inteiro reconhecido (o horário já filtrou quase tudo)\n  if (melhor && pontos >= 1 && melhor.hasTVNetworks) {\n    casados.push({ json: { jogoId: j.id, gameId: melhor.id } });\n  }\n}\n\nreturn casados;\n"
+      }
+    },
+    {
+      "id": "d4e58f94-b85e-4189-8031-6b89e7b1a5c1",
+      "name": "365Scores transmissão",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3136,
+        -96
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "https://webws.365scores.com/web/game/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "appTypeId",
+              "value": "5"
+            },
+            {
+              "name": "langId",
+              "value": "31"
+            },
+            {
+              "name": "timezoneName",
+              "value": "America/Sao_Paulo"
+            },
+            {
+              "name": "userCountryId",
+              "value": "21"
+            },
+            {
+              "name": "gameId",
+              "value": "={{ $json.gameId }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "193b39e1-a371-4d33-9366-b0600a484d7a",
+      "name": "Adicionar transmissão",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        -96
+      ],
+      "parameters": {
+        "jsCode": "// Nó Code \"Adicionar transmissão\" (modo: Run Once for All Items)\n// Devolve a seleção do nó \"Selecionar jogos\" com o campo \"transmissao\" em cada jogo:\n// os canais brasileiros (userCountryId=21) que a 365Scores lista para a partida, separados por vírgula.\n// Se a 365Scores falhar, os jogos seguem sem transmissão e a mensagem avisa.\n\nconst selecao = $('Selecionar jogos').first().json;\n\nconst respostasLista = $('365Scores jogos').all().map((i) => i.json);\nconst casados = $('Casar transmissões').all().map((i) => i.json).filter((c) => c.gameId);\nconst detalhes = casados.length ? $('365Scores transmissão').all().map((i) => i.json) : [];\n\nconst canais = new Map();\nfor (const d of detalhes) {\n  if (!d.game?.id) continue;\n  const nomes = (d.game.tvNetworks ?? []).map((t) => String(t.name ?? '').trim()).filter(Boolean);\n  canais.set(d.game.id, [...new Set(nomes)].join(', '));\n}\nconst gamePorJogo = new Map(casados.map((c) => [c.jogoId, c.gameId]));\n\nconst transmissaoFalhou = selecao.jogos.length > 0 && (\n  respostasLista.some((r) => r.error || !r.games) || detalhes.some((d) => d.error)\n);\n\nreturn [{\n  json: {\n    ...selecao,\n    transmissaoFalhou,\n    jogos: selecao.jogos.map((j) => ({ ...j, transmissao: canais.get(gamePorJogo.get(j.id)) ?? '' })),\n  },\n}];\n"
       }
     }
   ],
@@ -777,12 +910,7 @@
       "main": [
         [
           {
-            "node": "Separar jogos",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Montar mensagem",
+            "node": "Pedidos 365Scores",
             "type": "main",
             "index": 0
           }
@@ -884,6 +1012,66 @@
             "node": "Juntar fontes",
             "type": "main",
             "index": 6
+          }
+        ]
+      ]
+    },
+    "Pedidos 365Scores": {
+      "main": [
+        [
+          {
+            "node": "365Scores jogos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "365Scores jogos": {
+      "main": [
+        [
+          {
+            "node": "Casar transmissões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Casar transmissões": {
+      "main": [
+        [
+          {
+            "node": "365Scores transmissão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "365Scores transmissão": {
+      "main": [
+        [
+          {
+            "node": "Adicionar transmissão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adicionar transmissão": {
+      "main": [
+        [
+          {
+            "node": "Separar jogos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Montar mensagem",
+            "type": "main",
+            "index": 0
           }
         ]
       ]

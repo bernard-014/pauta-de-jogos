@@ -12,9 +12,11 @@ Para quem trabalha na produção e usa a pauta no dia a dia. Nada aqui exige mex
 
 Abaixo de cada jogo vem um briefing de até duas frases escrito pelo LLM a partir da tabela de classificação. **Confira antes de usar no ar**: o modelo é instruído a não inventar escalações ou resultados, mas ainda é um texto gerado.
 
+Quando a 365Scores lista onde o jogo passa, vem uma linha 📺 com os canais no Brasil, por exemplo *📺 SporTV 2, DAZN*. Jogo sem essa linha é jogo sem transmissão informada (comum na pré-temporada da NBA).
+
 Quando há desfalque que importa, vem uma linha 🚑 com até 3 nomes, por exemplo *🚑 Jalen Hurts (Eagles, fora); Baker Mayfield (Buccaneers, dúvida)*. A lista de lesionados e suspensos vem das fontes (ESPN para NFL e NBA, API-Football para futebol). O LLM só escolhe quais importam, e qualquer nome que não esteja na lista da fonte é descartado antes de ir para a mensagem. Mesmo assim, a situação do jogador pode mudar até a hora do jogo.
 
-Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando. Os avisos *"não mandou as lesões"* e *"API-Football falhou"* querem dizer que a pauta saiu normal, só sem a linha de desfalques daquele esporte.
+Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando. Os avisos *"não mandou as lesões"* e *"API-Football falhou"* querem dizer que a pauta saiu normal, só sem a linha de desfalques daquele esporte. O aviso *"A 365Scores não respondeu"* quer dizer que a pauta saiu sem a linha 📺.
 
 ## Onde ver todos os jogos
 
@@ -26,6 +28,7 @@ Na base **Pauta de Jogos** do Airtable, tabela **Jogos**, view **Jogos do Dia**.
 | Por que a nota | Justificativa em uma frase |
 | Briefing | O mesmo texto da mensagem |
 | Desfalques | Até 3 lesionados ou suspensos relevantes (vazio quando não há) |
+| Transmissão | Canais que passam o jogo no Brasil, segundo a 365Scores (vazio quando não há) |
 | Status | Agendado, Ao vivo, Encerrado, Adiado ou Cancelado (no momento da coleta) |
 
 ## Como mudar o que entra na pauta
@@ -87,6 +90,7 @@ Tabela **Times**:
 | Por que a nota | Texto longo |
 | Briefing | Texto longo |
 | Desfalques | Texto longo |
+| Transmissão | Texto curto |
 
 ## Quando algo dá errado
 
@@ -99,4 +103,6 @@ Manutenção: os nós HTTP separados **ESPN NFL lesões** e **ESPN NBA lesões**
 | Jogo importante ficou de fora | Nota abaixo do corte. Veja o *Por que a nota* no Airtable e, se for o caso, aumente o *Limite nota 4* ou o peso do time. |
 | Time grande tratado como pequeno | Falta a grafia dele em *Nomes nas APIs*. |
 | Jogo de futebol sem desfalques que deveriam aparecer | A API-Football escreve o nome do time de outro jeito. Acrescente essa grafia em *Nomes nas APIs* (ex.: `Bayern München`). Também pode ser que o campeonato não tenha cobertura de lesões na API-Football. |
+| Jogo sem linha 📺 que deveria ter | A 365Scores não informou canal, ou o jogo não foi reconhecido lá (horário diferente em mais de 15 min ou nome do time muito diferente: acrescente a grafia da 365Scores em *Nomes nas APIs*). |
+| Aviso "A 365Scores não respondeu" | A API do site da 365Scores caiu ou mudou. A pauta sai normal, só sem a transmissão. |
 | Aviso "API-Football falhou" | Chave errada ou vencida, cota diária de 100 chamadas estourada, ou o plano grátis não cobre a temporada atual. O texto entre parênteses é a mensagem da própria API. |

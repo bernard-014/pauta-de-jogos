@@ -42,7 +42,7 @@ Documentação para humanos: [`README.md`](README.md) (arquitetura, decisões, c
 
 ## Estado atual (atualize sempre)
 
-_Última atualização: 2026-10-16, Claude Code._
+_Última atualização: 2026-10-16, Claude Code (transmissão)._
 
 | O quê | Situação |
 |---|---|
@@ -54,6 +54,7 @@ _Última atualização: 2026-10-16, Claude Code._
 | Mensagem única no Telegram | Pronto, commitado. Só divide acima de 4096 caracteres. |
 | Janela da pauta 6h–6h | Pronto, commitado. |
 | Desfalques (lesões/suspensões) | Restaurados `ESPN NFL lesões` e `ESPN NBA lesões` (HTTP), Merge com 7 entradas e leitura das respostas completas. **Aplicado e confirmado na versão publicada do n8n** em 16/10/2026. Validação sem erros; teste local com lesões reais e jogos simulados aprovado. Falta conferir uma execução completa pelo usuário. Usuário prefere manter ~10 MB por execução. Coluna `Desfalques` já existe no Airtable; futebol ainda depende da credencial `API-Football` e de teste real. |
+| Transmissão (365Scores) | Implementada em 16/10/2026: 5 nós depois de `Selecionar jogos`, linha 📺 na mensagem e coluna `Transmissão` no Airtable (criada). **Aplicado e publicado no n8n**, validação sem erros. **Confirmado pelo usuário na execução 31** (linha 📺 apareceu). Commitado e enviado para a `main`. |
 | Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` sincronizada com o GitHub (confira com `git log --oneline -3`; correção dos desfalques da NBA e novo `start-n8n.ps1` já enviados). |
 
 ### Trabalho em andamento
@@ -103,8 +104,9 @@ O n8n tem modelo rascunho/publicado. Em workflow ativo, as atualizações via `n
    - Os nós ESPN e de lesões têm `onError: continueRegularOutput`: se falharem, o fluxo segue e a mensagem avisa.
 4. Todos → `Juntar fontes` (Merge v3.2, modo Append, `numberInputs` = número de fontes). **Toda fonte nova precisa entrar aqui, com `numberInputs` aumentado.** Sem o Merge, o nó seguinte rodaria uma vez por fonte e a pauta sairia repetida.
 5. `Montar jogos do dia` (Code) → `Ligas com classificação` (Code, `alwaysOutputData`) → `Classificação` (HTTP football-data standings, `onError: continue`) → `Preparar pedido ao Gemini` (Code) → `Gemini` (HTTP, retry a cada 5 s, `onError: continue`) → `Selecionar jogos` (Code)
-6. `Selecionar jogos` → `Separar jogos` (Code) → `Salvar no Airtable` (upsert na tabela Jogos pela coluna `ID`, `typecast: true`, auto-map)
-7. `Selecionar jogos` → `Montar mensagem` (Code) → `Send a text message` (Telegram, `parse_mode: HTML`)
+6. `Selecionar jogos` → `Pedidos 365Scores` (Code, `alwaysOutputData`, um item por esporte selecionado) → `365Scores jogos` (HTTP lista do dia, `onError: continue`) → `Casar transmissões` (Code, `alwaysOutputData`, casa por horário ±15 min + nome) → `365Scores transmissão` (HTTP detalhe por jogo, `onError: continue`) → `Adicionar transmissão` (Code: devolve a seleção com `transmissao` em cada jogo e `transmissaoFalhou`)
+7. `Adicionar transmissão` → `Separar jogos` (Code) → `Salvar no Airtable` (upsert na tabela Jogos pela coluna `ID`, `typecast: true`, auto-map)
+8. `Adicionar transmissão` → `Montar mensagem` (Code) → `Send a text message` (Telegram, `parse_mode: HTML`)
 
 O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
 
@@ -115,6 +117,9 @@ O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
 | Preparar pedido ao Gemini | `n8n/code/preparar-pedido-gemini.js` |
 | Selecionar jogos | `n8n/code/selecionar-jogos.js` |
 | Separar jogos | `n8n/code/separar-jogos-airtable.js` |
+| Pedidos 365Scores | `n8n/code/pedidos-365scores.js` |
+| Casar transmissões | `n8n/code/casar-transmissoes.js` |
+| Adicionar transmissão | `n8n/code/adicionar-transmissao.js` |
 | Montar mensagem | `n8n/code/montar-mensagem.js` |
 
 Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$('ESPN NBA')`...). **Renomear um nó quebra o código.**
@@ -170,13 +175,13 @@ Base **Pauta de Jogos** (o ID não fica no repositório: está no `.env` e nos n
 
 - **Campeonatos**: `Nome`, `Código` (código na API: `BSA`, `CLI`, `CL`, `PL`, `PD`, `SA`, `BL1`, `FL1`, `uefa.europa`, `nfl`, `nba`), `Fonte` (`football-data` | `ESPN`), `Bloco` (`Brasil` | `Copas` | `Europa` | `NFL` | `NBA`), `Todos os jogos`, `Limite nota 4`, `Ordem`, `Ativo`.
 - **Times**: `Nome`, `Peso` (3 gigante, 2 forte, 0 ou ausente = sem destaque), `Nomes nas APIs` (grafias separadas por vírgula). Futebol, NFL e NBA ficam **na mesma tabela**.
-- **Jogos**: `ID` (`fd-<id>` ou `espn-<id>`, chave do upsert), `Data` (dia da pauta), `Horário`, `Campeonato` (link), `Mandante`, `Visitante`, `Status`, `Nota`, `Por que a nota`, `Briefing`, `Desfalques` (texto longo, criado em 2026-10-16).
+- **Jogos**: `ID` (`fd-<id>` ou `espn-<id>`, chave do upsert), `Data` (dia da pauta), `Horário`, `Campeonato` (link), `Mandante`, `Visitante`, `Status`, `Nota`, `Por que a nota`, `Briefing`, `Desfalques` (texto longo, criado em 2026-10-16), `Transmissão` (texto curto, criado em 2026-10-16).
 
 Os CSVs em `airtable/` espelham o que foi carregado: `campeonatos.csv`, `times.csv` (45 de futebol), `times-nfl.csv` (32), `times-nba.csv` (30).
 
 ### Como escrever no Airtable
 
-Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` que gera os registros → `Airtable` com operação **upsert**, `typecast: true`, `matchingColumns` = `Código` ou `Nome`, usando a credencial `Airtable - Pauta de Jogos` e os IDs de base e tabela lidos dos nós do fluxo principal). Depois: ative, dispare com `n8n_test_workflow`, confira a execução com `n8n_executions`, desative e apague. Como é upsert, rodar duas vezes não duplica. O `typecast: true` cria opções novas em campos de seleção (foi assim que `NFL` e `NBA` entraram no `Bloco`). **Campos novos** (colunas) não podem ser criados assim: peça ao usuário para criar no Airtable.
+Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` que gera os registros → `Airtable` com operação **upsert**, `typecast: true`, `matchingColumns` = `Código` ou `Nome`, usando a credencial `Airtable - Pauta de Jogos` e os IDs de base e tabela lidos dos nós do fluxo principal). Depois: ative, dispare com `n8n_test_workflow`, confira a execução com `n8n_executions`, desative e apague. Como é upsert, rodar duas vezes não duplica. O `typecast: true` cria opções novas em campos de seleção (foi assim que `NFL` e `NBA` entraram no `Bloco`). **Campos novos** (colunas): no mesmo workflow temporário, troque o nó Airtable por um HTTP `POST https://api.airtable.com/v0/meta/bases/<base>/tables/<tabela>/fields` com `authentication: predefinedCredentialType`, `nodeCredentialType: airtableTokenApi` e corpo `{"name": ..., "type": "singleLineText"}`. Funcionou para `Desfalques` e `Transmissão`.
 
 ---
 
@@ -187,6 +192,7 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 | football-data.org (free) | Jogos e classificação do futebol | Cobre BSA, CLI, CL, PL, PD, SA, BL1, FL1. **Não cobre Europa League** no plano grátis. Limite de 10 req/min. |
 | ESPN (pública, sem chave) | Europa League, NFL, NBA, lesões NFL/NBA | `site.api.espn.com/apis/site/v2/sports/<esporte>/<liga>/scoreboard?dates=yyyyMMdd`. O código do campeonato no Airtable é o slug da liga (`uefa.europa`, `nfl`, `nba`). O placar já traz campanha (`records`), semana (NFL), fase (`leagues[0].season.type.name`: Preseason, Regular Season...), TV e local. |
 | API-Football (free, 100 req/dia) | Lesões do futebol | `v3.football.api-sports.io/injuries?date=...`, header `x-apisports-key`. Uma chamada por dia traz todos os jogos do mundo. Os ids não batem com football-data/ESPN: o jogo é casado pelo horário (±15 min) e o time pelo nome. **Não confirmado** se o plano grátis cobre a temporada atual (erro vem em `errors.plan`). |
+| 365Scores (API do site, sem chave, não oficial) | Canais de transmissão no Brasil | Lista: `webws.365scores.com/web/games/allscores/?appTypeId=5&langId=31&timezoneName=America/Sao_Paulo&userCountryId=21&sports=<1, 2 ou 6>&startDate=dd/MM/yyyy&endDate=...` (só traz `hasTVNetworks`). Detalhe: `.../web/game/?...&gameId=<id>` → `game.tvNetworks[].name`. Esportes: 1 futebol, 2 basquete, 6 futebol americano. Pode mudar sem aviso. |
 | Gemini | Nota, motivo, briefing, desfalques | Modelo `gemini-flash-lite-latest`: os `flash` maiores deram erro 503 de alta demanda em 2026-10-16. Uma chamada por dia com todos os jogos, resposta em JSON com `responseSchema`. |
 | Telegram Bot API | Envio da pauta | HTML, limite de 4096 caracteres por mensagem (o código corta em 3900). |
 
@@ -201,6 +207,7 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 - **Se o Gemini falhar**: nota pelo peso dos times (`pesoTotal >= 5` → 5; `>= 4` ou um time peso 3 → 4; `>= 2` → 3; senão 2), sem briefing, com aviso na mensagem.
 - **Pesos dos times**: no futebol, gigantes = 3 e fortes = 2. Na NFL, 3 para Cowboys, Packers, Chiefs, Patriots, Steelers e 49ers. Na NBA, os pesos misturam história, popularidade no Brasil e força até 2025-26: 3 para Lakers, Celtics, Warriors, Bulls, Knicks, Heat, Spurs e Thunder. **Revisar a NBA no início da temporada regular.**
 - **Nomes repetidos entre esportes**: as grafias da tabela Times formam um mapa único. `Spurs` fica só no **Tottenham**; o San Antonio usa só `San Antonio Spurs` (o código tenta o nome completo primeiro). Antes de cadastrar um apelido curto, confira se ele já existe em outro esporte.
+- **Transmissão**: só para os jogos selecionados; linha 📺 logo abaixo do jogo. Se a 365Scores falhar, aviso ⚠️ e pauta sem 📺.
 - **Mensagem**: uma só, com blocos na ordem Brasil, Copas, Europa, NFL, NBA (🇧🇷 🏆 🌍 🏈 🏀). O subtítulo do campeonato some quando repete o nome do bloco. Selos: 🔥 nota 5, ⭐ nota 4, ▫️ demais.
 
 ---
@@ -219,6 +226,8 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 ## Registro de mudanças
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
+
+- **2026-10-16, Claude Code**: transmissão dos jogos via API pública do site da 365Scores. 3 arquivos novos em `n8n/code/` (pedidos, casar, adicionar), `montar-mensagem.js` (linha 📺 + aviso) e `separar-jogos-airtable.js` (coluna `Transmissão`) agora leem `Adicionar transmissão`. Coluna `Transmissão` criada no Airtable pela API de metadados (workflow temporário, já apagado). Teste local: pauta real de 16/10 (execução 29) e 30 jogos de 18/10 (NFL, PL, La Liga, Serie A, Bundesliga, Brasileirão), 100% casados; queda da 365Scores e dia sem jogos testados. Aplicado e publicado no n8n (20 operações parciais), validação sem erros. JSON do repositório, README, MANUAL e ROADMAP atualizados. Usuário rodou o fluxo (execução 31, sucesso) e confirmou a linha 📺. Commitado na `main` com push.
 
 - **2026-10-16, Claude Code**: `start-n8n.ps1` agora fecha qualquer n8n já aberto (processos `node.exe` cuja linha de comando contém `D:\n8n`, incluindo o task runner) antes de subir, só quando o comando é `start`. O atalho da área de trabalho `n8n resumo de jogos.lnk` chama esse script (`powershell -NoExit -ExecutionPolicy Bypass -File ...start-n8n.ps1`), então não precisou mudar. Respondido ao usuário: a limpeza de 7 dias do histórico já é nativa (`EXECUTIONS_DATA_PRUNE`), vale após reiniciar. Sem commit. Depois: o script também mostra uma barra de progresso estimada (90 s, linha a cada 5 s, "PRONTO" quando a porta 5678 abre), porque a primeira subida com limpeza/VACUUM leva ~2 min sem nenhuma saída do n8n.
 

@@ -4,7 +4,7 @@ Fluxo agêntico no **n8n** que, todo dia às 7h, levanta os jogos de futebol, da
 
 Feito para resolver uma dor real de quem trabalha com esporte: toda manhã alguém da produção precisa descobrir quais jogos acontecem, quais importam para o público brasileiro e o que dizer sobre cada um. Aqui isso chega pronto no celular antes do expediente.
 
-**Custo: R$ 0.** Tudo roda em planos gratuitos (n8n self-hosted, Airtable Free, Gemini free tier, football-data.org free, API-Football free, ESPN pública, Telegram).
+**Custo: R$ 0.** Tudo roda em planos gratuitos (n8n self-hosted, Airtable Free, Gemini free tier, football-data.org free, API-Football free, ESPN pública, 365Scores pública, Telegram).
 
 > 🎥 **Vídeo de demonstração (2 min):** _em breve_
 
@@ -69,8 +69,9 @@ flowchart LR
     CL --> PG["Preparar pedido ao Gemini"]
     PG --> G["🤖 Gemini<br/>nota 1–5 + briefing<br/>(JSON estruturado)"]
     G --> SJ["Selecionar jogos<br/>(regras de corte)"]
-    SJ --> SA["Separar jogos"] --> AT[("Airtable<br/>Jogos (upsert)")]
-    SJ --> MM["Montar mensagem<br/>(HTML, ≤ 4096 caracteres)"] --> TG["📲 Telegram"]
+    SJ --> TV["365Scores<br/>onde passa (canais no Brasil)"]
+    TV --> SA["Separar jogos"] --> AT[("Airtable<br/>Jogos (upsert)")]
+    TV --> MM["Montar mensagem<br/>(HTML, ≤ 4096 caracteres)"] --> TG["📲 Telegram"]
 ```
 
 | Etapa | Nó no n8n | O que faz |
@@ -83,6 +84,7 @@ flowchart LR
 | 5 | **Ligas com classificação** + **Classificação** | Para cada liga com jogo hoje (e que tenha tabela), busca a classificação, que vira contexto para o LLM. |
 | 6 | **Preparar pedido ao Gemini** + **Gemini** | Monta o prompt com critérios explícitos de nota e pede a resposta em JSON com `responseSchema` fixo. |
 | 7 | **Selecionar jogos** (Code) | Aplica as regras de corte (abaixo). Se o Gemini falhar, calcula a nota pelo peso dos times e o resumo sai mesmo assim. |
+| 7b | **Pedidos 365Scores** → **365Scores jogos** → **Casar transmissões** → **365Scores transmissão** → **Adicionar transmissão** | Descobre onde passa cada jogo selecionado, usando a API pública do site da 365Scores (sem chave, `userCountryId=21` = canais do Brasil). Uma chamada de lista por esporte (futebol, basquete, futebol americano) e uma de detalhe por jogo que tem transmissão. Os ids não batem com os da football-data/ESPN, então o jogo é casado pelo horário (±15 min) e pelo nome dos times, a mesma regra usada com a API-Football. Roda depois da seleção para buscar só o que vai para a pauta. Se a 365Scores falhar, a pauta sai sem a linha 📺, com aviso. |
 | 8 | **Salvar no Airtable** | *Upsert* pela coluna `ID`: rodar duas vezes no mesmo dia atualiza em vez de duplicar. |
 | 9 | **Montar mensagem** + **Telegram** | Monta uma mensagem só, com blocos Brasil / Copas / Europa / 🏈 NFL / 🏀 NBA. Só divide em mais de uma se passar do limite de 4096 caracteres do Telegram. |
 
@@ -116,6 +118,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
 - **Por que Gemini (`gemini-flash-lite-latest`)?** Tem plano gratuito com cota suficiente para uma chamada por dia. Os modelos `flash` maiores devolveram erro 503 de alta demanda nos testes, e o `flash-lite` respondeu de forma estável com qualidade suficiente para notas e briefings curtos. A escolha foi por custo, cota e estabilidade.
 - **Desfalques vêm da fonte, não do LLM.** O Gemini só escolhe quais desfalques da lista importam. Antes de ir para a mensagem, o nó **Selecionar jogos** descarta qualquer nome que não esteja na lista da ESPN ou da API-Football.
 - **Limpeza do histórico de execuções.** Os nós HTTP de lesões mantêm as respostas completas da ESPN (~10 MB por execução), por escolha do usuário. O `start-n8n.ps1` mantém a limpeza automática: execuções com mais de 7 dias são apagadas, e o SQLite é compactado ao iniciar.
+- **Transmissão vem de uma API não oficial.** A 365Scores não documenta a API do site, então ela pode mudar sem aviso. Por isso os nós têm `onError: continue` e a falha só tira a linha 📺 da mensagem. Ela é buscada depois da seleção, não antes, porque não influencia a nota.
 - **Uma chamada só ao LLM por dia**, com todos os jogos no mesmo pedido. Economiza cota e deixa o modelo comparar os jogos entre si.
 - **Falha não derruba o resumo.** O nó Gemini tenta de novo com intervalo de 5 s e, se continuar falhando, a nota sai do peso dos times e a mensagem avisa que foi sem LLM. Se a ESPN cair, o resumo sai sem a Europa League, a NFL ou a NBA, com aviso.
 - **Configuração no Airtable, não no código.** Campeonatos, limites e peso dos times são editáveis por quem não programa. Ver o [manual de uso](docs/MANUAL.md).
