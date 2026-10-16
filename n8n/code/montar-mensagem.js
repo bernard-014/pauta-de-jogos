@@ -55,7 +55,7 @@ for (const bloco of blocos) {
     linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);
     if (j.transmissao) linhas.push(`📺 ${html(j.transmissao)}`);
     if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);
-    if (j.desfalques) linhas.push(`🚑 ${html(j.desfalques)}`);
+    for (const d of String(j.desfalques ?? '').split(';').map((s) => s.trim()).filter(Boolean)) linhas.push(`🚑 ${html(d)}`);
     adicionar(linhas.join('\n'));
   }
 }

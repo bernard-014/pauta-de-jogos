@@ -21,6 +21,8 @@ O próximo agente pode ser outro modelo, sem acesso à sua conversa nem à sua m
 
 ## Quem é o usuário e como trabalhar com ele
 
+- **2026-10-16, Claude Code**: desfalques na mensagem agora saem um por linha (🚑 + jogador), em vez de tudo corrido; `montar-mensagem.js` divide o campo `desfalques` por `;`. Aplicado e publicado no n8n (`patchNodeField`) e no JSON do repositório. **Sem commit.** Pendente: o usuário rodar o fluxo para conferir.
+
 - **Bernard**, brasileiro. Escreva **sempre em português do Brasil**, de forma clara e direta.
 - O projeto é de **portfólio** para uma vaga que pede n8n, Airtable, LLM, fluxo agêntico e documentação (contexto: CazéTV / 365Scores). O usuário quer **entender cada etapa para explicar na entrevista**: explique o porquê das decisões, não só o que foi feito.
 - **Tudo tem que ser gratuito.** Não proponha serviço pago.
@@ -203,7 +205,7 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 - **Janela da pauta**: de **hoje às 6h até amanhã às 6h** (horário de Brasília), para que jogos da NBA depois da meia-noite entrem na pauta certa. A `Data` gravada no Airtable é o dia da pauta.
 - **Seleção** (`selecionar-jogos.js`): campeonato com `Todos os jogos` marcado (Brasileirão, Libertadores) → entra tudo. Nos demais, nota 5 entra sempre e nota 4 entra até o `Limite nota 4` (CL 4, PL 3, NFL 3, NBA 3, demais 2), desempatando pelo peso total e pelo horário.
 - **Notas** (prompt em `preparar-pedido-gemini.js`): critérios explícitos para futebol, NFL (horário nobre, jogo fora dos EUA, playoff, campanhas fortes) e NBA (clássicos, jogo fora dos EUA, playoff; **pré-temporada vale no máximo 4**). O modelo não pode inventar escalações nem resultados.
-- **Desfalques**: `Montar jogos do dia` pendura até 12 por time (prioridade: fora/suspenso, depois dúvida, por último lista de lesionados). O Gemini devolve até 3 relevantes no campo `desfalques`, e `Selecionar jogos` descarta nomes que não estão na lista da fonte. Se o Gemini falhar, sai sem desfalques. Na mensagem, linha 🚑 abaixo do briefing.
+- **Desfalques**: `Montar jogos do dia` pendura até 12 por time (prioridade: fora/suspenso, depois dúvida, por último lista de lesionados). O Gemini devolve até 3 relevantes no campo `desfalques`, e `Selecionar jogos` descarta nomes que não estão na lista da fonte. Se o Gemini falhar, sai sem desfalques. Na mensagem, uma linha 🚑 por jogador (quebra no `;`) abaixo do briefing.
 - **Se o Gemini falhar**: nota pelo peso dos times (`pesoTotal >= 5` → 5; `>= 4` ou um time peso 3 → 4; `>= 2` → 3; senão 2), sem briefing, com aviso na mensagem.
 - **Pesos dos times**: no futebol, gigantes = 3 e fortes = 2. Na NFL, 3 para Cowboys, Packers, Chiefs, Patriots, Steelers e 49ers. Na NBA, os pesos misturam história, popularidade no Brasil e força até 2025-26: 3 para Lakers, Celtics, Warriors, Bulls, Knicks, Heat, Spurs e Thunder. **Revisar a NBA no início da temporada regular.**
 - **Nomes repetidos entre esportes**: as grafias da tabela Times formam um mapa único. `Spurs` fica só no **Tottenham**; o San Antonio usa só `San Antonio Spurs` (o código tenta o nome completo primeiro). Antes de cadastrar um apelido curto, confira se ele já existe em outro esporte.
