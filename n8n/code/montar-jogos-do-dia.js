@@ -1,6 +1,8 @@
 // Nó Code "Montar jogos do dia" (modo: Run Once for All Items)
 // Junta os jogos da football-data e da ESPN (Europa League, NFL e NBA), converte para o horário de Brasília,
 // fica só com os jogos da pauta de hoje e marca o peso de cada time a partir da tabela Times.
+// No fim, pendura em cada jogo os desfalques (lesionados e suspensos) de cada time:
+// NFL e NBA pela ESPN, futebol pela API-Football.
 
 const TZ = 'America/Sao_Paulo';
 const agora = $now.setZone(TZ);
@@ -53,8 +55,12 @@ const adicionar = (codigo, jogo) => {
     limiteNota4: c['Limite nota 4'] ?? 0,
     horario: inicio.toFormat('HH:mm'),
     horarioISO: inicio.toISO(),
+    utc: jogo.utc,
     mandante: jogo.mandante,
     visitante: jogo.visitante,
+    // Todas as grafias conhecidas de cada time, para casar com os nomes da API-Football
+    nomesMandante: [...new Set([jogo.mandante, ...(jogo.nomesMandante ?? []), jogo.timeMandante?.nome].filter(Boolean))],
+    nomesVisitante: [...new Set([jogo.visitante, ...(jogo.nomesVisitante ?? []), jogo.timeVisitante?.nome].filter(Boolean))],
     idMandante: jogo.idMandante ?? null,
     idVisitante: jogo.idVisitante ?? null,
     pesoMandante,
@@ -82,6 +88,8 @@ for (const m of $('football-data').first().json.matches ?? []) {
     visitante: m.awayTeam.shortName ?? m.awayTeam.name,
     idMandante: m.homeTeam.id,
     idVisitante: m.awayTeam.id,
+    nomesMandante: [m.homeTeam.name, m.homeTeam.shortName],
+    nomesVisitante: [m.awayTeam.name, m.awayTeam.shortName],
     timeMandante: acharTime(m.homeTeam.name, m.homeTeam.shortName),
     timeVisitante: acharTime(m.awayTeam.name, m.awayTeam.shortName),
     status: statusFD[m.status] ?? m.status,
@@ -117,6 +125,10 @@ const lerESPN = (no, slugPadrao) => {
       utc: ev.date,
       mandante: casa.team.shortDisplayName ?? casa.team.displayName,
       visitante: fora.team.shortDisplayName ?? fora.team.displayName,
+      idMandante: casa.team.id,
+      idVisitante: fora.team.id,
+      nomesMandante: [casa.team.displayName, casa.team.shortDisplayName],
+      nomesVisitante: [fora.team.displayName, fora.team.shortDisplayName],
       timeMandante: acharTime(casa.team.displayName, casa.team.shortDisplayName),
       timeVisitante: acharTime(fora.team.displayName, fora.team.shortDisplayName),
       campanhaMandante: casa.records?.[0]?.summary,
@@ -133,6 +145,101 @@ const espnFalhou = lerESPN('ESPN', 'uefa.europa');
 const nflFalhou = lerESPN('ESPN NFL', 'nfl');
 const nbaFalhou = lerESPN('ESPN NBA', 'nba');
 
+// ---------- Desfalques ----------
+// Cada desfalque vira { nome, texto, fora }: "texto" é o que vai para o Gemini e "fora" separa quem
+// certamente não joga (fora, lista de lesionados, suspenso) de quem é dúvida.
+const MAX_POR_TIME = 12;
+const statusEmPortugues = {
+  'Out': 'fora',
+  'Injured Reserve': 'fora (lista de lesionados)',
+  'Out For Season': 'fora da temporada',
+  'Suspension': 'suspenso',
+  'Doubtful': 'dúvida, improvável',
+  'Questionable': 'dúvida',
+  'Day-To-Day': 'dia a dia',
+  'Missing Fixture': 'fora',
+};
+const estaFora = (status) => /^fora|suspenso/.test(status);
+const desfalque = (nome, posicao, status, motivo) => ({
+  nome,
+  texto: `${nome}${posicao ? ` (${posicao})` : ''}: ${[status, motivo].filter(Boolean).join(', ')}`,
+  fora: estaFora(status),
+});
+// Primeiro quem é notícia nesta rodada (fora, suspenso, dúvida); quem está fora há tempo (lista de lesionados) vai por último
+const prioridade = (d) => (/lesionados|temporada/.test(d.texto) ? 2 : d.fora ? 0 : 1);
+const ordenar = (lista) => [...lista].sort((a, b) => prioridade(a) - prioridade(b)).slice(0, MAX_POR_TIME);
+
+// ESPN (NFL e NBA): uma chamada traz a liga inteira, agrupada por time. O id do time é o mesmo do placar.
+const lesoesESPN = (no, liga) => {
+  const resposta = $(no).first().json;
+  for (const time of resposta.injuries ?? []) {
+    const lista = (time.injuries ?? [])
+      .filter((l) => l.status && l.status !== 'Active')
+      .map((l) => {
+        const status = statusEmPortugues[l.status] ?? l.status.toLowerCase();
+        const motivo = [l.details?.type, l.details?.detail].filter((d) => d && d !== 'Not Specified').join(' ');
+        return desfalque(l.athlete?.displayName, l.athlete?.position?.abbreviation, status, motivo);
+      });
+    for (const j of jogos.filter((x) => x.codigo === liga)) {
+      if (String(j.idMandante) === String(time.id)) j.desfalquesMandante = ordenar(lista);
+      if (String(j.idVisitante) === String(time.id)) j.desfalquesVisitante = ordenar(lista);
+    }
+  }
+  return !resposta.injuries;
+};
+const nflLesoesFalhou = jogos.some((j) => j.codigo === 'nfl') && lesoesESPN('ESPN NFL lesões', 'nfl');
+const nbaLesoesFalhou = jogos.some((j) => j.codigo === 'nba') && lesoesESPN('ESPN NBA lesões', 'nba');
+
+// API-Football (futebol): a chamada traz os desfalques de todos os jogos do dia, no mundo inteiro.
+// Os ids não batem com os da football-data/ESPN, então o jogo é achado pelo horário de início
+// e o time pelo nome (grafias da tabela Times ou palavras em comum: "Man United" ~ "Manchester United").
+const GENERICAS = new Set(['fc', 'cf', 'ac', 'sc', 'afc', 'cd', 'ca', 'ec', 'se', 'rc', 'ssc', 'as', 'club', 'clube', 'de', 'da', 'do', 'the', 'calcio', 'futebol', 'football', 'esporte']);
+const palavras = (s) => semAcento(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((p) => p.length > 1 && !GENERICAS.has(p));
+const parecido = (nomeApi, nomes) => {
+  const canonico = acharTime(nomeApi)?.nome;
+  if (canonico && nomes.includes(canonico)) return 1;
+  const a = palavras(nomeApi);
+  let melhor = 0;
+  for (const n of nomes) {
+    const b = palavras(n);
+    if (!a.length || !b.length) continue;
+    // "Man" casa com "Manchester": conta prefixos com pelo menos 3 letras
+    const comuns = a.filter((p) => b.some((q) => p === q || (Math.min(p.length, q.length) >= 3 && (p.startsWith(q) || q.startsWith(p)))));
+    melhor = Math.max(melhor, comuns.length / Math.min(a.length, b.length));
+  }
+  return melhor;
+};
+
+const futebol = jogos.filter((j) => !['nfl', 'nba'].includes(j.codigo));
+const apiFootball = $('API-Football lesões').first().json;
+const errosApi = apiFootball.errors && !Array.isArray(apiFootball.errors) ? Object.values(apiFootball.errors) : [];
+const erroFutebol = !futebol.length ? null
+  : apiFootball.error ? (apiFootball.error.message ?? String(apiFootball.error))
+  : errosApi.length ? errosApi.join(' ')
+  : null;
+for (const l of apiFootball.response ?? []) {
+  const inicio = (l.fixture?.timestamp ?? 0) * 1000;
+  for (const j of futebol) {
+    if (Math.abs(DateTime.fromISO(j.utc).toMillis() - inicio) > 15 * 60 * 1000) continue;
+    const casa = parecido(l.team.name, j.nomesMandante);
+    const fora = parecido(l.team.name, j.nomesVisitante);
+    if (Math.max(casa, fora) < 0.5) continue;
+    const lado = casa >= fora ? 'desfalquesMandante' : 'desfalquesVisitante';
+    const status = statusEmPortugues[l.player.type] ?? String(l.player.type ?? '').toLowerCase();
+    (j[lado] ??= []).push(desfalque(l.player.name, null, status, l.player.reason));
+    break;
+  }
+}
+for (const j of futebol) {
+  if (j.desfalquesMandante) j.desfalquesMandante = ordenar(j.desfalquesMandante);
+  if (j.desfalquesVisitante) j.desfalquesVisitante = ordenar(j.desfalquesVisitante);
+}
+
 jogos.sort((a, b) => a.ordem - b.ordem || a.horarioISO.localeCompare(b.horarioISO));
 
-return [{ json: { data: hoje, total: jogos.length, jogos, espnFalhou, nflFalhou, nbaFalhou } }];
+return [{
+  json: {
+    data: hoje, total: jogos.length, jogos, espnFalhou, nflFalhou, nbaFalhou,
+    nflLesoesFalhou, nbaLesoesFalhou, erroFutebol,
+  },
+}];

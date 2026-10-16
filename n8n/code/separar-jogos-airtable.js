@@ -16,5 +16,6 @@ return jogos.map((j) => ({
     Nota: j.nota,
     'Por que a nota': j.motivo,
     Briefing: j.briefing,
+    Desfalques: j.desfalques,
   },
 }));

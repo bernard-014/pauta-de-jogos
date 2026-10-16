@@ -32,6 +32,10 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 - Ajustar o prompt do Gemini para dar nota a jogos de outros esportes (rivalidade, playoff, times de destaque).
 - Separar por esporte no texto do Telegram (⚽ / 🏈 / 🏀).
 
+## Desfalques
+- [x] Lesionados e suspensos de cada time: ESPN para NFL e NBA, API-Football para futebol. O Gemini escolhe até 3 que importam, e eles aparecem na linha 🚑 e na coluna *Desfalques* do Airtable.
+- [ ] Conferir com a chave real se o plano grátis da API-Football cobre a temporada atual de todas as ligas da pauta (o endpoint `/leagues` traz `coverage.injuries`).
+
 ## Outras ideias
 - [ ] Formulário do Airtable para a equipe marcar "quero cobertura deste jogo", com aviso automático no Telegram.
 - [ ] Rodar o n8n em um servidor gratuito para o gatilho das 7h não depender do PC ligado.

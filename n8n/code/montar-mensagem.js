@@ -4,7 +4,7 @@
 
 const LIMITE = 3900;
 const { data, jogos, llmFalhou, totalAnalisados } = $('Selecionar jogos').first().json;
-const { espnFalhou, nflFalhou, nbaFalhou } = $('Montar jogos do dia').first().json;
+const { espnFalhou, nflFalhou, nbaFalhou, nflLesoesFalhou, nbaLesoesFalhou, erroFutebol } = $('Montar jogos do dia').first().json;
 
 const html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');
@@ -27,6 +27,9 @@ if (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculada
 if (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');
 if (nflFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NFL podem estar faltando.');
 if (nbaFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NBA podem estar faltando.');
+if (nflLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NFL: desfalques ficaram de fora.');
+if (nbaLesoesFalhou) avisos.push('⚠️ A ESPN não mandou as lesões da NBA: desfalques ficaram de fora.');
+if (erroFutebol) avisos.push(`⚠️ API-Football falhou (${html(erroFutebol.slice(0, 150))}): desfalques do futebol ficaram de fora.`);
 
 const mensagens = [];
 let atual = cabecalho;
@@ -50,6 +53,7 @@ for (const bloco of blocos) {
     }
     linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);
     if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);
+    if (j.desfalques) linhas.push(`🚑 ${html(j.desfalques)}`);
     adicionar(linhas.join('\n'));
   }
 }

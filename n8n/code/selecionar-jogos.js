@@ -2,7 +2,7 @@
 // Lê as notas do Gemini e aplica as regras do resumo:
 // - campeonatos com "Todos os jogos" marcado: entram todos;
 // - nos outros: nota 5 entra sempre, nota 4 entra até o "Limite nota 4" do campeonato.
-// Se o Gemini falhar, a nota sai do peso dos times e o resumo é enviado mesmo assim.
+// Se o Gemini falhar, a nota sai do peso dos times e o resumo é enviado mesmo assim (sem briefing nem desfalques).
 
 const { data, jogos } = $('Montar jogos do dia').first().json;
 
@@ -24,6 +24,17 @@ const notaPeloPeso = (j) => {
   return 2;
 };
 
+// Só aceita desfalque que veio das fontes: se o Gemini citar alguém fora da lista do jogo, o nome cai.
+const semAcento = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const conferirDesfalques = (texto, j) => {
+  const conhecidos = [...(j.desfalquesMandante ?? []), ...(j.desfalquesVisitante ?? [])].map((d) => semAcento(d.nome));
+  return String(texto ?? '')
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s && conhecidos.includes(semAcento(s.split('(')[0])))
+    .join('; ');
+};
+
 const avaliados = jogos.map((j) => {
   const a = porId.get(j.id);
   const nota = Number.isInteger(a?.nota) ? Math.min(5, Math.max(1, a.nota)) : notaPeloPeso(j);
@@ -32,6 +43,7 @@ const avaliados = jogos.map((j) => {
     nota,
     motivo: a?.motivo ?? 'Nota calculada pelo peso dos times (sem LLM).',
     briefing: a?.briefing ?? '',
+    desfalques: conferirDesfalques(a?.desfalques, j),
   };
 });
 

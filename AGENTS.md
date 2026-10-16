@@ -53,17 +53,12 @@ _Última atualização: 2026-10-16, Claude Code._
 | Fontes em paralelo + Merge "Juntar fontes" | Pronto, commitado. |
 | Mensagem única no Telegram | Pronto, commitado. Só divide acima de 4096 caracteres. |
 | Janela da pauta 6h–6h | Pronto, commitado. |
-| **Desfalques (lesões/suspensões)** | **Em andamento, NÃO commitado.** Ver [Trabalho em andamento](#trabalho-em-andamento). |
+| Desfalques (lesões/suspensões) | Commitado na branch `desfalques` (falta juntar na `main` e fazer push). Publicado no n8n; coluna `Desfalques` criada no Airtable. NFL/NBA testados localmente com dados reais da ESPN e o Gemini real; **futebol só com resposta simulada**: falta o usuário criar a chave e a credencial `API-Football` no n8n e rodar o nó. |
 | Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` em `69c64a4` no último push. |
 
 ### Trabalho em andamento
 
-**Desfalques (sessão "APIs gratuitas de lesões de jogadores", Claude Code, 2026-10-16)**
-- Arquivos alterados e **não commitados**: `README.md`, `ROADMAP.md`, `docs/MANUAL.md`, `n8n/code/montar-jogos-do-dia.js`, `montar-mensagem.js`, `preparar-pedido-gemini.js`, `selecionar-jogos.js`, `separar-jogos-airtable.js`, `n8n/workflow-pauta-de-jogos.json`.
-- **No n8n já está publicado**: três nós novos (`ESPN NFL lesões`, `ESPN NBA lesões`, `API-Football lesões`), todos ligados de `Times` para o `Juntar fontes` (agora com 7 entradas).
-- Como funciona: a ESPN (`/football/nfl/injuries`, `/basketball/nba/injuries`) traz a liga inteira numa chamada, e os desfalques casam pelo id do time. A API-Football (`/injuries?date=hoje`) traz o futebol do dia, e o jogo é achado pelo horário de início (±15 min) e o time pelo nome (grafias da tabela Times ou palavras em comum). O Gemini escolhe até 3 desfalques por jogo, e `Selecionar jogos` descarta qualquer nome que não veio das fontes. Na mensagem eles aparecem numa linha 🚑, e no Airtable vão para a coluna `Desfalques` da tabela Jogos.
-- **A confirmar**: se a coluna `Desfalques` já existe na tabela Jogos do Airtable; se a credencial `API-Football` (Header Auth `x-apisports-key`) está criada no n8n; se o plano grátis da API-Football cobre a temporada atual das ligas (item aberto no ROADMAP); se houve um teste de ponta a ponta.
-- Não sobrescreva nem descarte esses arquivos. Antes de commitar, pergunte ao usuário se esse trabalho está terminado.
+_Nada em andamento._
 
 ---
 
@@ -101,7 +96,8 @@ O n8n tem modelo rascunho/publicado. Em workflow ativo, as atualizações via `n
    - `ESPN` (Europa League: `site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa/scoreboard?dates=yyyyMMdd`)
    - `ESPN NFL` (`.../football/nfl/scoreboard`)
    - `ESPN NBA` (`.../basketball/nba/scoreboard`)
-   - _(em andamento)_ `ESPN NFL lesões`, `ESPN NBA lesões`, `API-Football lesões`
+   - `ESPN NFL lesões` (`.../football/nfl/injuries`) e `ESPN NBA lesões` (`.../basketball/nba/injuries`): a liga inteira numa chamada, sem chave. A da NFL tem ~9 MB.
+   - `API-Football lesões` (`v3.football.api-sports.io/injuries?date=hoje&timezone=America/Sao_Paulo`, credencial `API-Football`)
    - Os nós ESPN e de lesões têm `onError: continueRegularOutput`: se falharem, o fluxo segue e a mensagem avisa.
 4. Todos → `Juntar fontes` (Merge v3.2, modo Append, `numberInputs` = número de fontes). **Toda fonte nova precisa entrar aqui, com `numberInputs` aumentado.** Sem o Merge, o nó seguinte rodaria uma vez por fonte e a pauta sairia repetida.
 5. `Montar jogos do dia` (Code) → `Ligas com classificação` (Code, `alwaysOutputData`) → `Classificação` (HTTP football-data standings, `onError: continue`) → `Preparar pedido ao Gemini` (Code) → `Gemini` (HTTP, retry a cada 5 s, `onError: continue`) → `Selecionar jogos` (Code)
@@ -127,7 +123,7 @@ Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$
 - `football-data.org` (Header Auth `X-Auth-Token`)
 - `Gemini (header)` (Header Auth `x-goog-api-key`)
 - `Telegram - Resumo de Jogos` (Telegram API)
-- `API-Football` (Header Auth `x-apisports-key`; conferir se já existe, ver Trabalho em andamento)
+- `API-Football` (Header Auth `x-apisports-key`): **o usuário ainda precisa criar** e selecionar no nó `API-Football lesões`. Sem ela o nó falha, o fluxo segue e a mensagem avisa.
 
 Para obter os IDs, leia um nó que usa a credencial (`n8n_get_workflow`, modo `filtered`).
 
@@ -172,7 +168,7 @@ Base **Pauta de Jogos** (o ID não fica no repositório: está no `.env` e nos n
 
 - **Campeonatos**: `Nome`, `Código` (código na API: `BSA`, `CLI`, `CL`, `PL`, `PD`, `SA`, `BL1`, `FL1`, `uefa.europa`, `nfl`, `nba`), `Fonte` (`football-data` | `ESPN`), `Bloco` (`Brasil` | `Copas` | `Europa` | `NFL` | `NBA`), `Todos os jogos`, `Limite nota 4`, `Ordem`, `Ativo`.
 - **Times**: `Nome`, `Peso` (3 gigante, 2 forte, 0 ou ausente = sem destaque), `Nomes nas APIs` (grafias separadas por vírgula). Futebol, NFL e NBA ficam **na mesma tabela**.
-- **Jogos**: `ID` (`fd-<id>` ou `espn-<id>`, chave do upsert), `Data` (dia da pauta), `Horário`, `Campeonato` (link), `Mandante`, `Visitante`, `Status`, `Nota`, `Por que a nota`, `Briefing`, `Desfalques` (em andamento).
+- **Jogos**: `ID` (`fd-<id>` ou `espn-<id>`, chave do upsert), `Data` (dia da pauta), `Horário`, `Campeonato` (link), `Mandante`, `Visitante`, `Status`, `Nota`, `Por que a nota`, `Briefing`, `Desfalques` (texto longo, criado em 2026-10-16).
 
 Os CSVs em `airtable/` espelham o que foi carregado: `campeonatos.csv`, `times.csv` (45 de futebol), `times-nfl.csv` (32), `times-nba.csv` (30).
 
@@ -188,7 +184,7 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 |---|---|---|
 | football-data.org (free) | Jogos e classificação do futebol | Cobre BSA, CLI, CL, PL, PD, SA, BL1, FL1. **Não cobre Europa League** no plano grátis. Limite de 10 req/min. |
 | ESPN (pública, sem chave) | Europa League, NFL, NBA, lesões NFL/NBA | `site.api.espn.com/apis/site/v2/sports/<esporte>/<liga>/scoreboard?dates=yyyyMMdd`. O código do campeonato no Airtable é o slug da liga (`uefa.europa`, `nfl`, `nba`). O placar já traz campanha (`records`), semana (NFL), fase (`leagues[0].season.type.name`: Preseason, Regular Season...), TV e local. |
-| API-Football (free, 100 req/dia) | Lesões do futebol (em andamento) | `v3.football.api-sports.io/injuries?date=...`, header `x-apisports-key`. |
+| API-Football (free, 100 req/dia) | Lesões do futebol | `v3.football.api-sports.io/injuries?date=...`, header `x-apisports-key`. Uma chamada por dia traz todos os jogos do mundo. Os ids não batem com football-data/ESPN: o jogo é casado pelo horário (±15 min) e o time pelo nome. **Não confirmado** se o plano grátis cobre a temporada atual (erro vem em `errors.plan`). |
 | Gemini | Nota, motivo, briefing, desfalques | Modelo `gemini-flash-lite-latest`: os `flash` maiores deram erro 503 de alta demanda em 2026-10-16. Uma chamada por dia com todos os jogos, resposta em JSON com `responseSchema`. |
 | Telegram Bot API | Envio da pauta | HTML, limite de 4096 caracteres por mensagem (o código corta em 3900). |
 
@@ -198,7 +194,8 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 
 - **Janela da pauta**: de **hoje às 6h até amanhã às 6h** (horário de Brasília), para que jogos da NBA depois da meia-noite entrem na pauta certa. A `Data` gravada no Airtable é o dia da pauta.
 - **Seleção** (`selecionar-jogos.js`): campeonato com `Todos os jogos` marcado (Brasileirão, Libertadores) → entra tudo. Nos demais, nota 5 entra sempre e nota 4 entra até o `Limite nota 4` (CL 4, PL 3, NFL 3, NBA 3, demais 2), desempatando pelo peso total e pelo horário.
-- **Notas** (prompt em `preparar-pedido-gemini.js`): critérios explícitos para futebol, NFL (horário nobre, jogo fora dos EUA, playoff, campanhas fortes) e NBA (clássicos, jogo fora dos EUA, playoff; **pré-temporada vale no máximo 4**). O modelo não pode inventar escalações, resultados ou lesões.
+- **Notas** (prompt em `preparar-pedido-gemini.js`): critérios explícitos para futebol, NFL (horário nobre, jogo fora dos EUA, playoff, campanhas fortes) e NBA (clássicos, jogo fora dos EUA, playoff; **pré-temporada vale no máximo 4**). O modelo não pode inventar escalações nem resultados.
+- **Desfalques**: `Montar jogos do dia` pendura até 12 por time (prioridade: fora/suspenso, depois dúvida, por último lista de lesionados). O Gemini devolve até 3 relevantes no campo `desfalques`, e `Selecionar jogos` descarta nomes que não estão na lista da fonte. Se o Gemini falhar, sai sem desfalques. Na mensagem, linha 🚑 abaixo do briefing.
 - **Se o Gemini falhar**: nota pelo peso dos times (`pesoTotal >= 5` → 5; `>= 4` ou um time peso 3 → 4; `>= 2` → 3; senão 2), sem briefing, com aviso na mensagem.
 - **Pesos dos times**: no futebol, gigantes = 3 e fortes = 2. Na NFL, 3 para Cowboys, Packers, Chiefs, Patriots, Steelers e 49ers. Na NBA, os pesos misturam história, popularidade no Brasil e força até 2025-26: 3 para Lakers, Celtics, Warriors, Bulls, Knicks, Heat, Spurs e Thunder. **Revisar a NBA no início da temporada regular.**
 - **Nomes repetidos entre esportes**: as grafias da tabela Times formam um mapa único. `Spurs` fica só no **Tottenham**; o San Antonio usa só `San Antonio Spurs` (o código tenta o nome completo primeiro). Antes de cadastrar um apelido curto, confira se ele já existe em outro esporte.
@@ -221,6 +218,7 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
 
+- **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques commitados na branch `desfalques` (README, MANUAL, ROADMAP, códigos e JSON). Coluna `Desfalques` criada na tabela Jogos pela API de metadados do Airtable. Pendente: juntar na `main` e push; credencial `API-Football` e teste do usuário no n8n.
 - **2026-10-16, Claude Code**: criados este `AGENTS.md` e o `CLAUDE.md` (que importa este arquivo), com a regra de mantê-lo atualizado a cada tarefa. Registrado o trabalho de desfalques, que outra sessão deixou em andamento sem commit.
 - **2026-10-16, Claude Code**: commit `69c64a4` na `main` (push feito): NFL e NBA (nós ESPN, 32 + 30 times, linhas em Campeonatos), fontes em paralelo com o Merge `Juntar fontes`, janela da pauta 6h–6h, mensagem única no Telegram, `Data` = dia da pauta. Tudo aplicado no n8n e no Airtable. Teste do usuário no n8n: OK (antes da mensagem única, que só foi testada localmente).
 - **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques via ESPN e API-Football. Publicado no n8n, **não commitado** (ver Trabalho em andamento).

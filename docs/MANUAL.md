@@ -10,9 +10,11 @@ Para quem trabalha na produção e usa a pauta no dia a dia. Nada aqui exige mex
 - ⭐ **bom jogo** (nota 4): pelo menos um time gigante ou dois times da parte de cima da tabela.
 - ▫️ demais jogos de campeonatos em que entram todos (Brasileirão e Libertadores).
 
-Abaixo de cada jogo vem um briefing de até duas frases escrito pelo LLM a partir da tabela de classificação. **Confira antes de usar no ar**: o modelo é instruído a não inventar lesões, escalações ou resultados, mas ainda é um texto gerado.
+Abaixo de cada jogo vem um briefing de até duas frases escrito pelo LLM a partir da tabela de classificação. **Confira antes de usar no ar**: o modelo é instruído a não inventar escalações ou resultados, mas ainda é um texto gerado.
 
-Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando.
+Quando há desfalque que importa, vem uma linha 🚑 com até 3 nomes, por exemplo *🚑 Jalen Hurts (Eagles, fora); Baker Mayfield (Buccaneers, dúvida)*. A lista de lesionados e suspensos vem das fontes (ESPN para NFL e NBA, API-Football para futebol). O LLM só escolhe quais importam, e qualquer nome que não esteja na lista da fonte é descartado antes de ir para a mensagem. Mesmo assim, a situação do jogador pode mudar até a hora do jogo.
+
+Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando. Os avisos *"não mandou as lesões"* e *"API-Football falhou"* querem dizer que a pauta saiu normal, só sem a linha de desfalques daquele esporte.
 
 ## Onde ver todos os jogos
 
@@ -23,6 +25,7 @@ Na base **Pauta de Jogos** do Airtable, tabela **Jogos**, view **Jogos do Dia**.
 | Nota | 1 a 5, dada pelo LLM |
 | Por que a nota | Justificativa em uma frase |
 | Briefing | O mesmo texto da mensagem |
+| Desfalques | Até 3 lesionados ou suspensos relevantes (vazio quando não há) |
 | Status | Agendado, Ao vivo, Encerrado, Adiado ou Cancelado (no momento da coleta) |
 
 ## Como mudar o que entra na pauta
@@ -83,6 +86,7 @@ Tabela **Times**:
 | Nota | Avaliação (1–5) |
 | Por que a nota | Texto longo |
 | Briefing | Texto longo |
+| Desfalques | Texto longo |
 
 ## Quando algo dá errado
 
@@ -92,3 +96,5 @@ Tabela **Times**:
 | "Hoje não tem jogos dos campeonatos acompanhados" | Dia sem jogos nos campeonatos ativos (comum em data FIFA). |
 | Jogo importante ficou de fora | Nota abaixo do corte. Veja o *Por que a nota* no Airtable e, se for o caso, aumente o *Limite nota 4* ou o peso do time. |
 | Time grande tratado como pequeno | Falta a grafia dele em *Nomes nas APIs*. |
+| Jogo de futebol sem desfalques que deveriam aparecer | A API-Football escreve o nome do time de outro jeito. Acrescente essa grafia em *Nomes nas APIs* (ex.: `Bayern München`). Também pode ser que o campeonato não tenha cobertura de lesões na API-Football. |
+| Aviso "API-Football falhou" | Chave errada ou vencida, cota diária de 100 chamadas estourada, ou o plano grátis não cobre a temporada atual. O texto entre parênteses é a mensagem da própria API. |

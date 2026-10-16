@@ -1,10 +1,10 @@
 # Pauta de Jogos ⚽
 
-Fluxo agêntico no **n8n** que, todo dia às 7h, levanta os jogos de futebol, da NFL e da NBA do dia, usa um **LLM (Gemini)** para dar uma nota de relevância e escrever um briefing de cada jogo, guarda tudo no **Airtable** e manda a pauta pronta num bot do **Telegram**.
+Fluxo agêntico no **n8n** que, todo dia às 7h, levanta os jogos de futebol, da NFL e da NBA do dia e os desfalques (lesionados e suspensos) de cada time, usa um **LLM (Gemini)** para dar uma nota de relevância, escrever um briefing e apontar os desfalques que importam em cada jogo, guarda tudo no **Airtable** e manda a pauta pronta num bot do **Telegram**.
 
 Feito para resolver uma dor real de quem trabalha com esporte: toda manhã alguém da produção precisa descobrir quais jogos acontecem, quais importam para o público brasileiro e o que dizer sobre cada um. Aqui isso chega pronto no celular antes do expediente.
 
-**Custo: R$ 0.** Tudo roda em planos gratuitos (n8n self-hosted, Airtable Free, Gemini free tier, football-data.org free, ESPN pública, Telegram).
+**Custo: R$ 0.** Tudo roda em planos gratuitos (n8n self-hosted, Airtable Free, Gemini free tier, football-data.org free, API-Football free, ESPN pública, Telegram).
 
 > 🎥 **Vídeo de demonstração (2 min):** _em breve_
 
@@ -55,10 +55,14 @@ flowchart LR
     TM --> ES["ESPN<br/>Europa League"]
     TM --> NF["ESPN<br/>NFL"]
     TM --> NB["ESPN<br/>NBA"]
+    TM --> LE["ESPN<br/>lesões NFL e NBA"]
+    TM --> AF["API-Football<br/>lesões do futebol"]
     FD --> JF["Juntar fontes<br/>(Merge)"]
     ES --> JF
     NF --> JF
     NB --> JF
+    LE --> JF
+    AF --> JF
     JF --> MJ["Montar jogos do dia<br/>(fuso, filtro, peso dos times)"]
     MJ --> LC["Ligas com classificação"]
     LC --> CL["football-data.org<br/>tabela de classificação"]
@@ -74,7 +78,8 @@ flowchart LR
 | 1 | **Schedule Trigger** | Dispara às 7h (fuso `America/Sao_Paulo`). |
 | 2 | **Campeonatos** / **Times** (Airtable) | Lê a configuração mantida pela produção: quais campeonatos acompanhar, limites por campeonato e o peso de cada time. |
 | 3 | **football-data** / **ESPN** / **ESPN NFL** / **ESPN NBA** (HTTP) | Busca os jogos. A football-data cobre Brasileirão, Libertadores, Champions e as 5 grandes ligas; a Europa League não está no plano grátis, então vem do endpoint público da ESPN, assim como a NFL (`football/nfl/scoreboard`, que já traz a campanha dos times, a semana e a TV) e a NBA (`basketball/nba/scoreboard`, que também marca pré-temporada, temporada regular e playoffs). As quatro são independentes, então saem lado a lado do nó Times e se encontram no **Juntar fontes** (Merge, modo Append), que espera todas terminarem. Sem ele, o nó seguinte rodaria uma vez por fonte e a pauta sairia triplicada. O n8n executa ramos um de cada vez, então isso deixa o fluxo mais legível, não mais rápido. |
-| 4 | **Montar jogos do dia** (Code) | Junta as quatro fontes num formato único, converte UTC para o horário de Brasília, mantém só os jogos da pauta (de hoje às 6h até amanhã às 6h, para não perder jogo da NBA que começa depois da meia-noite) e casa os nomes dos times com a tabela Times. |
+| 3b | **ESPN NFL lesões** / **ESPN NBA lesões** / **API-Football lesões** (HTTP) | Busca os desfalques. A ESPN (`football/nfl/injuries`, `basketball/nba/injuries`) devolve a liga inteira numa chamada só, sem chave. A API-Football (`/injuries?date=hoje`) devolve os desfalques de todos os jogos de futebol do dia numa chamada, e o plano grátis permite 100 por dia. Também entram no **Juntar fontes**. Se alguma falhar, a pauta sai sem a linha de desfalques daquele esporte, com aviso. |
+| 4 | **Montar jogos do dia** (Code) | Junta as quatro fontes num formato único, converte UTC para o horário de Brasília, mantém só os jogos da pauta (de hoje às 6h até amanhã às 6h, para não perder jogo da NBA que começa depois da meia-noite) e casa os nomes dos times com a tabela Times. Depois pendura em cada jogo os desfalques dos dois times: NFL e NBA pelo id do time na ESPN, futebol pelo horário de início e pelo nome do time (a API-Football usa ids próprios). |
 | 5 | **Ligas com classificação** + **Classificação** | Para cada liga com jogo hoje (e que tenha tabela), busca a classificação, que vira contexto para o LLM. |
 | 6 | **Preparar pedido ao Gemini** + **Gemini** | Monta o prompt com critérios explícitos de nota e pede a resposta em JSON com `responseSchema` fixo. |
 | 7 | **Selecionar jogos** (Code) | Aplica as regras de corte (abaixo). Se o Gemini falhar, calcula a nota pelo peso dos times e o resumo sai mesmo assim. |
@@ -98,10 +103,10 @@ Os limites ficam na tabela **Campeonatos** do Airtable (colunas *Todos os jogos*
 
 ### O que o LLM recebe e devolve
 
-Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição dos dois times na tabela e o peso de cada time. O prompt define o que é nota 5 (clássico, confronto direto no topo, decisão) até nota 1 e proíbe inventar lesões, escalações ou resultados recentes. A resposta vem em JSON validado por schema:
+Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição dos dois times na tabela, o peso de cada time e a lista de desfalques de cada lado. O prompt define o que é nota 5 (clássico, confronto direto no topo, decisão) até nota 1, proíbe inventar escalações ou resultados recentes e manda citar só os desfalques da lista. A resposta vem em JSON validado por schema:
 
 ```json
-{ "jogos": [ { "id": "fd-123", "nota": 4, "motivo": "...", "briefing": "..." } ] }
+{ "jogos": [ { "id": "fd-123", "nota": 4, "motivo": "...", "briefing": "...", "desfalques": "Pedro (Flamengo, fora)" } ] }
 ```
 
 ---
@@ -109,6 +114,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
 ## Decisões de projeto
 
 - **Por que Gemini (`gemini-flash-lite-latest`)?** Tem plano gratuito com cota suficiente para uma chamada por dia. Os modelos `flash` maiores devolveram erro 503 de alta demanda nos testes, e o `flash-lite` respondeu de forma estável com qualidade suficiente para notas e briefings curtos. A escolha foi por custo, cota e estabilidade.
+- **Desfalques vêm da fonte, não do LLM.** O Gemini só escolhe quais desfalques da lista importam. Antes de ir para a mensagem, o nó **Selecionar jogos** descarta qualquer nome que não esteja na lista da ESPN ou da API-Football.
 - **Uma chamada só ao LLM por dia**, com todos os jogos no mesmo pedido. Economiza cota e deixa o modelo comparar os jogos entre si.
 - **Falha não derruba o resumo.** O nó Gemini tenta de novo com intervalo de 5 s e, se continuar falhando, a nota sai do peso dos times e a mensagem avisa que foi sem LLM. Se a ESPN cair, o resumo sai sem a Europa League, a NFL ou a NBA, com aviso.
 - **Configuração no Airtable, não no código.** Campeonatos, limites e peso dos times são editáveis por quem não programa. Ver o [manual de uso](docs/MANUAL.md).
@@ -138,7 +144,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
 
 ## Como rodar
 
-**Pré-requisitos:** Node.js 20–24 (o n8n ainda não roda no Node 26) e contas gratuitas em [football-data.org](https://www.football-data.org/client/register), [Google AI Studio](https://aistudio.google.com/apikey), [Airtable](https://airtable.com) e um bot criado no [@BotFather](https://t.me/BotFather).
+**Pré-requisitos:** Node.js 20–24 (o n8n ainda não roda no Node 26) e contas gratuitas em [football-data.org](https://www.football-data.org/client/register), [API-Football](https://dashboard.api-football.com/register), [Google AI Studio](https://aistudio.google.com/apikey), [Airtable](https://airtable.com) e um bot criado no [@BotFather](https://t.me/BotFather).
 
 1. **Airtable:** crie uma base com as tabelas `Campeonatos`, `Times` e `Jogos` (campos descritos no [manual](docs/MANUAL.md#estrutura-do-airtable)) e importe os CSVs da pasta `airtable/`. Gere um *personal access token* com acesso a essa base.
 2. **Segredos:** copie `.env.example` para `.env` e preencha.
@@ -147,6 +153,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
    - *Airtable Personal Access Token*
    - *Header Auth* `X-Auth-Token` para a football-data.org
    - *Header Auth* `x-goog-api-key` para o Gemini
+   - *Header Auth* `x-apisports-key` para a API-Football (nome da credencial: `API-Football`)
    - *Telegram API* com o token do bot
 5. Rode o `workflow-smoke-test.json` para conferir as quatro APIs, execute o fluxo principal manualmente uma vez e depois ative-o.
 

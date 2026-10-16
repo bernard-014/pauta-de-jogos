@@ -1,5 +1,5 @@
 // Nó Code "Preparar pedido ao Gemini" (modo: Run Once for All Items)
-// Junta cada jogo com a posição dos times na tabela e monta o corpo da chamada ao Gemini,
+// Junta cada jogo com a posição dos times na tabela e os desfalques, e monta o corpo da chamada ao Gemini,
 // pedindo a resposta em JSON com formato fixo (responseSchema).
 
 const { data, jogos } = $('Montar jogos do dia').first().json;
@@ -29,6 +29,8 @@ const lista = jogos.map((j) => ({
   campanhaMandante: j.campanhaMandante ?? undefined,
   campanhaVisitante: j.campanhaVisitante ?? undefined,
   extras: j.extras ?? undefined,
+  desfalquesMandante: j.desfalquesMandante?.map((d) => d.texto),
+  desfalquesVisitante: j.desfalquesVisitante?.map((d) => d.texto),
   pesoMandante: j.pesoMandante,
   pesoVisitante: j.pesoVisitante,
 }));
@@ -58,7 +60,10 @@ Jogos da NBA (basquete) também usam os mesmos números:
 Pré-temporada (fase "Preseason") vale menos: no máximo 4, e só com time peso 3 ou clássico. Na NBA, "campanha" é vitórias-derrotas na fase indicada.
 
 Regras:
-- Use os dados de tabela e campanha fornecidos. Não invente resultados recentes, lesões, artilheiros, técnicos ou escalações.
+- Use os dados de tabela e campanha fornecidos. Não invente resultados recentes, artilheiros, técnicos ou escalações.
+- "desfalquesMandante" e "desfalquesVisitante" listam lesionados e suspensos informados pelas fontes ("Nome (posição): situação, motivo"). Use só esses: não cite nenhum outro jogador como desfalque. Se o jogo não tiver essa lista, não fale de desfalques.
+- A ausência de uma estrela ou titular importante pode mudar a nota e merece entrar no briefing. Reserva, jogador de rotação ou quem está fora há meses não muda nada.
+- "desfalques": os até 3 desfalques que importam para o jogo, no formato "Nome (Time, situação em português)", separados por "; ". Ex.: "Patrick Mahomes (Chiefs, dúvida); Travis Kelce (Chiefs, fora)". Se nenhum for relevante ou não houver lista, devolva "".
 - Brasileirão e Libertadores interessam mais ao público: na dúvida, suba a nota.
 - "motivo": uma frase curta explicando a nota.
 - "briefing": no máximo 2 frases, em português do Brasil, dizendo o que está em jogo. Tom de jornalista esportivo, sem exagero.
@@ -82,8 +87,9 @@ const body = {
               nota: { type: 'INTEGER' },
               motivo: { type: 'STRING' },
               briefing: { type: 'STRING' },
+              desfalques: { type: 'STRING' },
             },
-            required: ['id', 'nota', 'motivo', 'briefing'],
+            required: ['id', 'nota', 'motivo', 'briefing', 'desfalques'],
           },
         },
       },
