@@ -90,6 +90,8 @@ Tabela **Times**:
 
 ## Quando algo dá errado
 
+Manutenção: os nós HTTP separados **ESPN NFL lesões** e **ESPN NBA lesões** mantêm as respostas completas (~10 MB por execução). A reversão foi aplicada e confirmada no n8n publicado em 16/10/2026, com validação sem erros. Falta conferir uma execução completa. A limpeza automática do histórico continua configurada no script de inicialização.
+
 | Sintoma | Causa provável |
 |---|---|
 | Não chegou mensagem às 7h | O computador com o n8n estava desligado, ou o fluxo foi desativado. |

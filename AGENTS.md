@@ -42,7 +42,7 @@ Documentação para humanos: [`README.md`](README.md) (arquitetura, decisões, c
 
 ## Estado atual (atualize sempre)
 
-_Última atualização: 2026-10-16, Claude Code._
+_Última atualização: 2026-10-16, Codex._
 
 | O quê | Situação |
 |---|---|
@@ -53,12 +53,13 @@ _Última atualização: 2026-10-16, Claude Code._
 | Fontes em paralelo + Merge "Juntar fontes" | Pronto, commitado. |
 | Mensagem única no Telegram | Pronto, commitado. Só divide acima de 4096 caracteres. |
 | Janela da pauta 6h–6h | Pronto, commitado. |
-| Desfalques (lesões/suspensões) | Na `main` (`ae22887`, push feito). Lesões da ESPN enxugadas no nó Code `Lesões ESPN`. Publicado no n8n; coluna `Desfalques` criada no Airtable. NFL/NBA testados localmente com dados reais da ESPN e o Gemini real; **futebol só com resposta simulada**: falta o usuário criar a chave e a credencial `API-Football` no n8n e rodar o nó. |
+| Desfalques (lesões/suspensões) | Restaurados `ESPN NFL lesões` e `ESPN NBA lesões` (HTTP), Merge com 7 entradas e leitura das respostas completas. **Aplicado e confirmado na versão publicada do n8n** em 16/10/2026. Validação sem erros; teste local com lesões reais e jogos simulados aprovado. Falta conferir uma execução completa pelo usuário. Usuário prefere manter ~10 MB por execução. Coluna `Desfalques` já existe no Airtable; futebol ainda depende da credencial `API-Football` e de teste real. |
 | Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` em `ae22887` no último push. |
 
 ### Trabalho em andamento
 
-_Nada em andamento._
+- Reversão aplicada e publicada em `Fb91kahwaHwrAQwV`. **Causa de "NBA sem lesões" achada em 2026-10-16**: o nó `ESPN NBA lesões` funcionava (4 a 9 desfalques por time chegavam ao Gemini), mas o `gemini-flash-lite-latest` devolvia `desfalques` vazio em todos os jogos, porque quase tudo na pré-temporada é "Rest" (poupado) e o prompt mandava ignorar quem não é relevante. Corrigido (prompt mais inclusivo + "Rest" traduzido para "poupado (descanso)" + dedupe dos desfalques repetidos da API-Football), aplicado e publicado no n8n. **Confirmado pelo usuário na execução 29: a linha 🚑 aparece nos jogos da NBA** (estrelas "poupado"). A execução 28 caiu em erro 503 do Gemini (alta demanda) mesmo com retry e saiu só com nota pelo peso; ideia: mais tentativas ou modelo de reserva.
+- Ideia pendente: buscar lesões só dos times dos jogos selecionados. Medido: `.../injuries?team=<id>` funciona na ESPN (~45 KB por time na NBA, ~270 KB na NFL; formato = lista plana `injuries`, sem agrupar por time), mas buscar os times de todos os jogos do dia dá o mesmo volume da chamada única. Só economiza se for feito depois da seleção, o que exige uma segunda chamada ao Gemini só para desfalques (a nota hoje depende deles). Não implementado. Alterações locais ainda sem commit/push.
 
 ---
 
@@ -72,7 +73,7 @@ _Nada em andamento._
   - O gatilho das 7h só dispara com o PC ligado e o n8n rodando.
 - **`.env`** (nunca leia, nunca commite): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `FOOTBALL_DATA_TOKEN`, `GEMINI_API_KEY`, `AIRTABLE_TOKEN`, `AIRTABLE_BASE_ID`. O modelo está em `.env.example`.
 - **MCP do n8n (Claude Code)**: servidor `n8n-mcp` configurado em `~/.claude.json`, com `N8N_API_URL=http://localhost:5678`, a API key do n8n e `WEBHOOK_SECURITY_MODE=moderate`. Sem esse último, o n8n-mcp bloqueia webhooks em localhost. A variável só vale para processos novos: reconectar o MCP na mesma sessão não basta, e se o `n8n_health_check` falar em "strict mode", o processo é antigo.
-- **Codex**: para operar o n8n como o Claude faz, configure o mesmo `n8n-mcp` em `~/.codex/config.toml`. Sem MCP, edite os arquivos e peça ao usuário para aplicar no n8n pela interface (ou use a API REST do n8n com a API key, que o usuário precisa fornecer por variável de ambiente, nunca no chat).
+- **MCP do n8n (Codex)**: configurado em `C:\Users\Bernard\.codex\config.toml`, seção `mcp_servers.n8n-mcp`, usando o pacote global já instalado **n8n-mcp 2.94.0**. Comando `cmd`, argumentos `["/c", "n8n-mcp"]` e as seis variáveis copiados da configuração do Claude para este projeto, incluindo `WEBHOOK_SECURITY_MODE=moderate`. Igualdade de comando, argumentos e ambiente verificada pelo `codex.cmd mcp get n8n-mcp --json`, sem exibir segredos. O processo atual não recarregou seu catálogo de ferramentas; nesta sessão o mesmo servidor foi acionado por cliente MCP stdio usando o SDK já instalado no pacote. Conexão e API do n8n testadas. Sessões novas devem carregar o MCP pela configuração; o shell isolado pode não enxergar a configuração pessoal que foi escrita fora dele.
 - **GitHub**: o `gh` está logado como `bernard-014`. Remoto `origin` = `https://github.com/bernard-014/pauta-de-jogos.git`.
 
 ---
@@ -97,7 +98,7 @@ O n8n tem modelo rascunho/publicado. Em workflow ativo, as atualizações via `n
    - `ESPN` (Europa League: `site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa/scoreboard?dates=yyyyMMdd`)
    - `ESPN NFL` (`.../football/nfl/scoreboard`)
    - `ESPN NBA` (`.../basketball/nba/scoreboard`)
-   - `Lesões ESPN` (**Code**, não HTTP): busca `.../football/nfl/injuries` e `.../basketball/nba/injuries` com `this.helpers.httpRequest` e devolve `{ nfl: [...], nba: [...] }` só com nome, posição, status e motivo (~45 KB). A resposta crua da NFL tem ~9 MB; num nó HTTP ela iria inteira para o histórico de execuções. `this.helpers.httpRequest` funciona no nó Code deste n8n (testado em 2026-10-16 com os task runners ligados).
+   - `ESPN NFL lesões` (HTTP, `.../football/nfl/injuries`) e `ESPN NBA lesões` (HTTP, `.../basketball/nba/injuries`): respostas completas, ~10 MB por execução, por escolha do usuário. **Restaurados no repositório e no n8n publicado**. O usuário relatou que deixou de ver lesões da NBA após a unificação e pediu a reversão; o nó Code `Lesões ESPN` foi removido.
    - `API-Football lesões` (`v3.football.api-sports.io/injuries?date=hoje&timezone=America/Sao_Paulo`, credencial `API-Football`)
    - Os nós ESPN e de lesões têm `onError: continueRegularOutput`: se falharem, o fluxo segue e a mensagem avisa.
 4. Todos → `Juntar fontes` (Merge v3.2, modo Append, `numberInputs` = número de fontes). **Toda fonte nova precisa entrar aqui, com `numberInputs` aumentado.** Sem o Merge, o nó seguinte rodaria uma vez por fonte e a pauta sairia repetida.
@@ -115,7 +116,6 @@ O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
 | Selecionar jogos | `n8n/code/selecionar-jogos.js` |
 | Separar jogos | `n8n/code/separar-jogos-airtable.js` |
 | Montar mensagem | `n8n/code/montar-mensagem.js` |
-| Lesões ESPN | `n8n/code/lesoes-espn.js` |
 
 Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$('ESPN NBA')`...). **Renomear um nó quebra o código.**
 
@@ -219,6 +219,12 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 ## Registro de mudanças
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
+
+- **2026-10-16, Claude Code**: investigada a "NBA sem lesões" (execução 27: dados chegam, Gemini devolve vazio). Ajustados `preparar-pedido-gemini.js` (regra de `desfalques` inclui estrela em dúvida/descanso) e `montar-jogos-do-dia.js` ("Rest" → "poupado (descanso)", "Undisclosed" → "não divulgado", dedupe de desfalques repetidos da API-Football). Testado localmente com a ESPN real; JSON do repositório sincronizado; aplicado e publicado no n8n por `patchNodeField` (o código vivo usa CRLF: inclua `\r\n` nos `find`). **Sem commit/push.** Pendente: o usuário rodar o fluxo; filtro de lesões por time (ver Trabalho em andamento).
+
+- **2026-10-16, Codex**: configurado no Codex o mesmo MCP n8n do Claude (pacote global 2.94.0, comando/argumentos/seis variáveis idênticos, sem expor chave). Conexão MCP stdio e health check aprovados. Aplicadas 11 operações parciais em `Fb91kahwaHwrAQwV` para restaurar lesões NFL/NBA separadas, Merge com 7 entradas e parser anterior. Confirmados rascunho e versão publicada, parâmetros e credenciais dos demais nós preservados. Validação: zero erros, oito avisos esperados de `executeOnce`. AGENTS, MANUAL e ROADMAP atualizados. Sem execução completa, commit ou push; falta o usuário conferir a mensagem real. Novas sessões devem carregar o MCP salvo.
+
+- **2026-10-16, Codex**: revertida localmente a unificação das lesões ESPN a pedido do usuário: restaurados os dois nós HTTP, Merge com 7 entradas e parser anterior; removido `n8n/code/lesoes-espn.js`. Mantida a limpeza automática. README, MANUAL e ROADMAP atualizados. Teste com respostas reais da ESPN (NFL ~8,8 MB; NBA ~1,5 MB) e jogos simulados associou lesões aos dois times; falha isolada da NBA preservou NFL. **Sem commit/push e sem alteração no n8n vivo**: falta acesso MCP/aba conectada. Causa do problema relatado ainda não diagnosticada; execução completa pendente.
 
 - **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: os nós HTTP `ESPN NFL lesões` e `ESPN NBA lesões` viraram o nó Code `Lesões ESPN`, que devolve ~45 KB em vez de ~10 MB (`Juntar fontes` com 6 entradas). Limpeza automática de execuções no `start-n8n.ps1`. Aplicado no n8n, na `main` com push (`ae22887`). Pendente: o usuário reiniciar o n8n pelo script para a limpeza valer.
 - **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques commitados (`e04a032`, na `main` com push). Coluna `Desfalques` criada na tabela Jogos pela API de metadados do Airtable. Pendente: credencial `API-Football` e teste do usuário no n8n.

@@ -33,6 +33,8 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 - Separar por esporte no texto do Telegram (⚽ / 🏈 / 🏀).
 
 ## Desfalques
+- [x] Restaurar **ESPN NFL lesões** e **ESPN NBA lesões** separados, com respostas completas (~10 MB por execução), conforme pedido em 16/10/2026. Aplicado e confirmado no n8n publicado, validação sem erros e teste local com lesões reais em jogos simulados aprovado.
+- [ ] Conferir uma execução completa da pauta após a reversão, verificando os desfalques da NBA na mensagem.
 - [x] Lesionados e suspensos de cada time: ESPN para NFL e NBA, API-Football para futebol. O Gemini escolhe até 3 que importam, e eles aparecem na linha 🚑 e na coluna *Desfalques* do Airtable.
 - [ ] Conferir com a chave real se o plano grátis da API-Football cobre a temporada atual de todas as ligas da pauta (o endpoint `/leagues` traz `coverage.injuries`).
 
@@ -41,3 +43,5 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 - [ ] Rodar o n8n em um servidor gratuito para o gatilho das 7h não depender do PC ligado.
 
 _(adicionar aqui conforme surgirem)_
+
+- [ ] Lesões só dos times selecionados: `injuries?team=<id>` da ESPN funciona (~45 KB/time na NBA), mas só economiza se buscar depois da seleção, com uma segunda chamada ao Gemini só para desfalques.

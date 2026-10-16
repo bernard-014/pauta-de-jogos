@@ -63,7 +63,7 @@ Regras:
 - Use os dados de tabela e campanha fornecidos. Não invente resultados recentes, artilheiros, técnicos ou escalações.
 - "desfalquesMandante" e "desfalquesVisitante" listam lesionados e suspensos informados pelas fontes ("Nome (posição): situação, motivo"). Use só esses: não cite nenhum outro jogador como desfalque. Se o jogo não tiver essa lista, não fale de desfalques.
 - A ausência de uma estrela ou titular importante pode mudar a nota e merece entrar no briefing. Reserva, jogador de rotação ou quem está fora há meses não muda nada.
-- "desfalques": os até 3 desfalques que importam para o jogo, no formato "Nome (Time, situação em português)", separados por "; ". Ex.: "Patrick Mahomes (Chiefs, dúvida); Travis Kelce (Chiefs, fora)". Se nenhum for relevante ou não houver lista, devolva "".
+- "desfalques": os até 3 desfalques que importam para o jogo, no formato "Nome (Time, situação em português)", separados por "; ". Ex.: "Patrick Mahomes (Chiefs, dúvida); Travis Kelce (Chiefs, fora)". Jogador conhecido do público (estrela, All-Star, titular de time grande) entra mesmo que seja só dúvida ou descanso: "descanso" (poupado) é desfalque de verdade, principalmente na pré-temporada da NBA, e deve aparecer como "poupado". Devolva "" só se a lista estiver vazia ou tiver apenas reservas desconhecidos.
 - Brasileirão e Libertadores interessam mais ao público: na dúvida, suba a nota.
 - "motivo": uma frase curta explicando a nota.
 - "briefing": no máximo 2 frases, em português do Brasil, dizendo o que está em jogo. Tom de jornalista esportivo, sem exagero.
