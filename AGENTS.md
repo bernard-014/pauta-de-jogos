@@ -42,7 +42,7 @@ Documentação para humanos: [`README.md`](README.md) (arquitetura, decisões, c
 
 ## Estado atual (atualize sempre)
 
-_Última atualização: 2026-10-16, Codex._
+_Última atualização: 2026-10-16, Claude Code._
 
 | O quê | Situação |
 |---|---|
@@ -54,12 +54,12 @@ _Última atualização: 2026-10-16, Codex._
 | Mensagem única no Telegram | Pronto, commitado. Só divide acima de 4096 caracteres. |
 | Janela da pauta 6h–6h | Pronto, commitado. |
 | Desfalques (lesões/suspensões) | Restaurados `ESPN NFL lesões` e `ESPN NBA lesões` (HTTP), Merge com 7 entradas e leitura das respostas completas. **Aplicado e confirmado na versão publicada do n8n** em 16/10/2026. Validação sem erros; teste local com lesões reais e jogos simulados aprovado. Falta conferir uma execução completa pelo usuário. Usuário prefere manter ~10 MB por execução. Coluna `Desfalques` já existe no Airtable; futebol ainda depende da credencial `API-Football` e de teste real. |
-| Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` em `ae22887` no último push. |
+| Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` sincronizada com o GitHub (confira com `git log --oneline -3`; correção dos desfalques da NBA e novo `start-n8n.ps1` já enviados). |
 
 ### Trabalho em andamento
 
 - Reversão aplicada e publicada em `Fb91kahwaHwrAQwV`. **Causa de "NBA sem lesões" achada em 2026-10-16**: o nó `ESPN NBA lesões` funcionava (4 a 9 desfalques por time chegavam ao Gemini), mas o `gemini-flash-lite-latest` devolvia `desfalques` vazio em todos os jogos, porque quase tudo na pré-temporada é "Rest" (poupado) e o prompt mandava ignorar quem não é relevante. Corrigido (prompt mais inclusivo + "Rest" traduzido para "poupado (descanso)" + dedupe dos desfalques repetidos da API-Football), aplicado e publicado no n8n. **Confirmado pelo usuário na execução 29: a linha 🚑 aparece nos jogos da NBA** (estrelas "poupado"). A execução 28 caiu em erro 503 do Gemini (alta demanda) mesmo com retry e saiu só com nota pelo peso; ideia: mais tentativas ou modelo de reserva.
-- Ideia pendente: buscar lesões só dos times dos jogos selecionados. Medido: `.../injuries?team=<id>` funciona na ESPN (~45 KB por time na NBA, ~270 KB na NFL; formato = lista plana `injuries`, sem agrupar por time), mas buscar os times de todos os jogos do dia dá o mesmo volume da chamada única. Só economiza se for feito depois da seleção, o que exige uma segunda chamada ao Gemini só para desfalques (a nota hoje depende deles). Não implementado. Alterações locais ainda sem commit/push.
+- Ideia pendente: buscar lesões só dos times dos jogos selecionados. Medido: `.../injuries?team=<id>` funciona na ESPN (~45 KB por time na NBA, ~270 KB na NFL; formato = lista plana `injuries`, sem agrupar por time), mas buscar os times de todos os jogos do dia dá o mesmo volume da chamada única. Só economiza se for feito depois da seleção, o que exige uma segunda chamada ao Gemini só para desfalques (a nota hoje depende deles). Não implementado.
 
 ---
 
