@@ -1,0 +1,672 @@
+{
+  "name": "Pauta de Jogos",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -32
+      ],
+      "id": "0f6ee500-471b-424c-be83-2b0b0b761fa5",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.texto }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2672,
+        16
+      ],
+      "id": "3a8d2756-d24d-417f-81a9-2057703b9ac7",
+      "name": "Send a text message",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram - Resumo de Jogos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Campeonatos"
+        },
+        "filterByFormula": "{Ativo}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        80,
+        -112
+      ],
+      "id": "c497a2c7-aa7a-45f5-b0cb-e8a1a886ed9e",
+      "name": "Campeonatos",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Times"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        304,
+        -112
+      ],
+      "id": "e2477f11-dcb3-44d3-9018-a06c6db02798",
+      "name": "Times",
+      "executeOnce": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.football-data.org/v4/matches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "competitions",
+              "value": "={{ $('Campeonatos').all().filter(i => i.json.Fonte === 'football-data').map(i => i.json['Código']).join(',') }}"
+            },
+            {
+              "name": "dateFrom",
+              "value": "={{ $now.setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "dateTo",
+              "value": "={{ $now.setZone('America/Sao_Paulo').plus({ days: 2 }).toFormat('yyyy-MM-dd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        528,
+        -112
+      ],
+      "id": "a01b724e-1b4a-4851-b61b-ed9f73c6c973",
+      "name": "football-data",
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "football-data.org"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa/scoreboard",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dates",
+              "value": "={{ $now.setZone('America/Sao_Paulo').toFormat('yyyyMMdd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        752,
+        -112
+      ],
+      "id": "83aa91a5-7583-455f-aa31-c7aa2043574d",
+      "name": "ESPN",
+      "executeOnce": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nó Code \"Montar jogos do dia\" (modo: Run Once for All Items)\n// Junta os jogos da football-data e da ESPN, converte para o horário de Brasília,\n// fica só com os jogos de hoje e marca o peso de cada time a partir da tabela Times.\n\nconst TZ = 'America/Sao_Paulo';\nconst hoje = $now.setZone(TZ).toFormat('yyyy-MM-dd');\n\n// O nó do Airtable devolve os campos soltos no item; este helper aceita os dois formatos.\nconst campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });\n\n// Campeonatos ativos, indexados pelo código usado na API\nconst campeonatos = {};\nfor (const c of $('Campeonatos').all().map(campos)) {\n  if (c.Ativo) campeonatos[c['Código']] = c;\n}\n\n// Peso dos times: cada grafia em \"Nomes nas APIs\" aponta para o time\nconst semAcento = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();\nconst times = new Map();\nfor (const t of $('Times').all().map(campos)) {\n  for (const nome of (t['Nomes nas APIs'] ?? '').split(',')) {\n    if (nome.trim()) times.set(semAcento(nome), { nome: t.Nome, peso: t.Peso ?? 1 });\n  }\n}\nconst acharTime = (...nomes) => {\n  for (const n of nomes) {\n    const t = times.get(semAcento(n));\n    if (t) return t;\n  }\n  return null;\n};\n\nconst jogos = [];\nconst adicionar = (codigo, jogo) => {\n  const c = campeonatos[codigo];\n  if (!c) return;\n  const inicio = DateTime.fromISO(jogo.utc, { zone: 'utc' }).setZone(TZ);\n  if (inicio.toFormat('yyyy-MM-dd') !== hoje) return;\n  const pesoMandante = jogo.timeMandante?.peso ?? 0;\n  const pesoVisitante = jogo.timeVisitante?.peso ?? 0;\n  jogos.push({\n    id: jogo.id,\n    campeonato: c.Nome,\n    campeonatoId: c.id,\n    codigo,\n    bloco: c.Bloco,\n    ordem: c.Ordem ?? 99,\n    todosOsJogos: !!c['Todos os jogos'],\n    limiteNota4: c['Limite nota 4'] ?? 0,\n    horario: inicio.toFormat('HH:mm'),\n    horarioISO: inicio.toISO(),\n    mandante: jogo.mandante,\n    visitante: jogo.visitante,\n    idMandante: jogo.idMandante ?? null,\n    idVisitante: jogo.idVisitante ?? null,\n    pesoMandante,\n    pesoVisitante,\n    pesoTotal: pesoMandante + pesoVisitante,\n    status: jogo.status,\n    fase: jogo.fase ?? null,\n    rodada: jogo.rodada ?? null,\n  });\n};\n\n// football-data.org\nconst statusFD = {\n  SCHEDULED: 'Agendado', TIMED: 'Agendado', IN_PLAY: 'Ao vivo', PAUSED: 'Ao vivo',\n  FINISHED: 'Encerrado', AWARDED: 'Encerrado', POSTPONED: 'Adiado', SUSPENDED: 'Adiado', CANCELLED: 'Cancelado',\n};\nfor (const m of $('football-data').first().json.matches ?? []) {\n  adicionar(m.competition.code, {\n    id: `fd-${m.id}`,\n    utc: m.utcDate,\n    mandante: m.homeTeam.shortName ?? m.homeTeam.name,\n    visitante: m.awayTeam.shortName ?? m.awayTeam.name,\n    idMandante: m.homeTeam.id,\n    idVisitante: m.awayTeam.id,\n    timeMandante: acharTime(m.homeTeam.name, m.homeTeam.shortName),\n    timeVisitante: acharTime(m.awayTeam.name, m.awayTeam.shortName),\n    status: statusFD[m.status] ?? m.status,\n    fase: m.stage,\n    rodada: m.matchday,\n  });\n}\n\n// ESPN (só Europa League). Se a ESPN falhar, o nó segue sem esses jogos.\nconst statusESPN = (s) => {\n  if (s.name === 'STATUS_POSTPONED') return 'Adiado';\n  if (s.name === 'STATUS_CANCELED') return 'Cancelado';\n  return { pre: 'Agendado', in: 'Ao vivo', post: 'Encerrado' }[s.state] ?? s.name;\n};\nconst espn = $('ESPN').first().json;\nfor (const ev of espn.events ?? []) {\n  const lados = ev.competitions[0].competitors;\n  const casa = lados.find((l) => l.homeAway === 'home').team;\n  const fora = lados.find((l) => l.homeAway === 'away').team;\n  adicionar(espn.leagues?.[0]?.slug ?? 'uefa.europa', {\n    id: `espn-${ev.id}`,\n    utc: ev.date,\n    mandante: casa.shortDisplayName ?? casa.displayName,\n    visitante: fora.shortDisplayName ?? fora.displayName,\n    timeMandante: acharTime(casa.displayName, casa.shortDisplayName),\n    timeVisitante: acharTime(fora.displayName, fora.shortDisplayName),\n    status: statusESPN(ev.status.type),\n  });\n}\n\njogos.sort((a, b) => a.ordem - b.ordem || a.horarioISO.localeCompare(b.horarioISO));\n\nreturn [{ json: { data: hoje, total: jogos.length, jogos, espnFalhou: !!espn.error } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -112
+      ],
+      "id": "4e8dd3b2-4623-4ccd-966e-a709bb6ff615",
+      "name": "Montar jogos do dia"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nó Code \"Ligas com classificação\" (modo: Run Once for All Items)\n// Gera um item por campeonato que tem jogo hoje e tem tabela de classificação.\n// Mata-mata (ex.: Libertadores na fase final) não tem tabela, então fica de fora.\n// Ligue \"Always Output Data\" nas Settings: assim o fluxo segue mesmo sem nenhuma liga.\n\nconst { jogos } = $('Montar jogos do dia').first().json;\nconst fasesComTabela = ['REGULAR_SEASON', 'LEAGUE_STAGE', 'GROUP_STAGE'];\n\nconst codigos = new Set(\n  jogos\n    .filter((j) => j.id.startsWith('fd-') && fasesComTabela.includes(j.fase))\n    .map((j) => j.codigo),\n);\n\nreturn [...codigos].map((codigo) => ({ json: { codigo } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        -112
+      ],
+      "id": "d001575a-5ccc-4ba5-bdb6-9f3c1407a892",
+      "name": "Ligas com classificação",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.football-data.org/v4/competitions/{{ $json.codigo }}/standings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1520,
+        -112
+      ],
+      "id": "04710199-4c6e-4aae-b7bb-fed4a05f78a9",
+      "name": "Classificação",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "football-data.org"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nó Code \"Preparar pedido ao Gemini\" (modo: Run Once for All Items)\n// Junta cada jogo com a posição dos times na tabela e monta o corpo da chamada ao Gemini,\n// pedindo a resposta em JSON com formato fixo (responseSchema).\n\nconst { data, jogos } = $('Montar jogos do dia').first().json;\n\n// Posição de cada time por campeonato (o Bayern tem uma posição na Bundesliga e outra na Champions)\nconst tabela = new Map();\nfor (const item of $('Classificação').all()) {\n  const codigo = item.json.competition?.code;\n  for (const s of item.json.standings ?? []) {\n    if (s.type !== 'TOTAL') continue;\n    for (const linha of s.table) {\n      tabela.set(`${codigo}:${linha.team.id}`, `${linha.position}º de ${s.table.length}, ${linha.points} pts em ${linha.playedGames} jogos`);\n    }\n  }\n}\n\nconst lista = jogos.map((j) => ({\n  id: j.id,\n  campeonato: j.campeonato,\n  fase: j.fase ?? undefined,\n  rodada: j.rodada ?? undefined,\n  horario: j.horario,\n  mandante: j.mandante,\n  visitante: j.visitante,\n  tabelaMandante: tabela.get(`${j.codigo}:${j.idMandante}`),\n  tabelaVisitante: tabela.get(`${j.codigo}:${j.idVisitante}`),\n  pesoMandante: j.pesoMandante,\n  pesoVisitante: j.pesoVisitante,\n}));\n\nconst instrucoes = `Você é editor de pauta de um canal de esportes brasileiro.\nPara cada jogo, dê uma nota de relevância de 1 a 5 para o público brasileiro e escreva um briefing.\n\nCritérios da nota:\n5 = jogão: clássico ou rivalidade histórica, confronto direto entre times do topo da tabela, decisão (mata-mata, final) ou time brasileiro decidindo título ou vaga.\n4 = jogo bom: pelo menos um time gigante (peso 3) ou confronto entre times da parte de cima da tabela.\n3 = interessante só para quem acompanha o campeonato.\n2 = jogo comum.\n1 = pouco relevante.\n\nO peso dos times vem de uma lista mantida pela produção: 3 = gigante, 2 = forte, 0 = sem destaque.\n\nRegras:\n- Use os dados de tabela fornecidos. Não invente resultados recentes, lesões, artilheiros, técnicos ou escalações.\n- Brasileirão e Libertadores interessam mais ao público: na dúvida, suba a nota.\n- \"motivo\": uma frase curta explicando a nota.\n- \"briefing\": no máximo 2 frases, em português do Brasil, dizendo o que está em jogo. Tom de jornalista esportivo, sem exagero.\n- Avalie todos os jogos recebidos e devolva cada um com o mesmo id.`;\n\nconst body = {\n  systemInstruction: { parts: [{ text: instrucoes }] },\n  contents: [{ role: 'user', parts: [{ text: `Jogos de ${data}:\\n${JSON.stringify(lista, null, 1)}` }] }],\n  generationConfig: {\n    temperature: 0.4,\n    responseMimeType: 'application/json',\n    responseSchema: {\n      type: 'OBJECT',\n      properties: {\n        jogos: {\n          type: 'ARRAY',\n          items: {\n            type: 'OBJECT',\n            properties: {\n              id: { type: 'STRING' },\n              nota: { type: 'INTEGER' },\n              motivo: { type: 'STRING' },\n              briefing: { type: 'STRING' },\n            },\n            required: ['id', 'nota', 'motivo', 'briefing'],\n          },\n        },\n      },\n      required: ['jogos'],\n    },\n  },\n};\n\nreturn [{ json: { totalJogos: jogos.length, body } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        -112
+      ],
+      "id": "f53a1e96-b2ec-4bb5-b5a0-cfd0e68b91c2",
+      "name": "Preparar pedido ao Gemini"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1952,
+        -112
+      ],
+      "id": "1a2a67ad-48d7-4e6a-9728-c7ae914c4d5e",
+      "name": "Gemini",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini (header)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nó Code \"Selecionar jogos\" (modo: Run Once for All Items)\n// Lê as notas do Gemini e aplica as regras do resumo:\n// - campeonatos com \"Todos os jogos\" marcado: entram todos;\n// - nos outros: nota 5 entra sempre, nota 4 entra até o \"Limite nota 4\" do campeonato.\n// Se o Gemini falhar, a nota sai do peso dos times e o resumo é enviado mesmo assim.\n\nconst { data, jogos } = $('Montar jogos do dia').first().json;\n\nlet avaliacoes = [];\nlet llmFalhou = false;\ntry {\n  const resposta = $('Gemini').first().json;\n  const texto = resposta.candidates[0].content.parts.map((p) => p.text ?? '').join('');\n  avaliacoes = JSON.parse(texto).jogos;\n} catch (e) {\n  llmFalhou = jogos.length > 0;\n}\nconst porId = new Map(avaliacoes.map((a) => [a.id, a]));\n\nconst notaPeloPeso = (j) => {\n  if (j.pesoTotal >= 5) return 5;\n  if (j.pesoTotal >= 4 || Math.max(j.pesoMandante, j.pesoVisitante) === 3) return 4;\n  if (j.pesoTotal >= 2) return 3;\n  return 2;\n};\n\nconst avaliados = jogos.map((j) => {\n  const a = porId.get(j.id);\n  const nota = Number.isInteger(a?.nota) ? Math.min(5, Math.max(1, a.nota)) : notaPeloPeso(j);\n  return {\n    ...j,\n    nota,\n    motivo: a?.motivo ?? 'Nota calculada pelo peso dos times (sem LLM).',\n    briefing: a?.briefing ?? '',\n  };\n});\n\nconst porCampeonato = new Map();\nfor (const j of avaliados) {\n  if (!porCampeonato.has(j.codigo)) porCampeonato.set(j.codigo, []);\n  porCampeonato.get(j.codigo).push(j);\n}\n\nconst escolhidos = [];\nfor (const lista of porCampeonato.values()) {\n  if (lista[0].todosOsJogos) {\n    escolhidos.push(...lista);\n    continue;\n  }\n  escolhidos.push(...lista.filter((j) => j.nota === 5));\n  const nota4 = lista\n    .filter((j) => j.nota === 4)\n    .sort((a, b) => b.pesoTotal - a.pesoTotal || a.horarioISO.localeCompare(b.horarioISO));\n  escolhidos.push(...nota4.slice(0, lista[0].limiteNota4));\n}\n\nescolhidos.sort((a, b) => a.ordem - b.ordem || a.horarioISO.localeCompare(b.horarioISO));\n\nreturn [{\n  json: {\n    data,\n    llmFalhou,\n    totalAnalisados: jogos.length,\n    totalEscolhidos: escolhidos.length,\n    jogos: escolhidos,\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -96
+      ],
+      "id": "fe4c0275-8253-4e1a-bf23-41419a1aea91",
+      "name": "Selecionar jogos"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nó Code \"Separar jogos\" (modo: Run Once for All Items)\n// Transforma a lista de jogos escolhidos em um item por jogo,\n// com as chaves iguais aos nomes das colunas da tabela Jogos no Airtable.\n\nconst { jogos } = $('Selecionar jogos').first().json;\n\nreturn jogos.map((j) => ({\n  json: {\n    ID: j.id,\n    Data: j.horarioISO.slice(0, 10),\n    'Horário': j.horarioISO,\n    Campeonato: [j.campeonatoId],\n    Mandante: j.mandante,\n    Visitante: j.visitante,\n    Status: j.status,\n    Nota: j.nota,\n    'Por que a nota': j.motivo,\n    Briefing: j.briefing,\n  },\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        -176
+      ],
+      "id": "549abebf-f313-4f3b-bebc-0a2268173f4f",
+      "name": "Separar jogos"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Jogos"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Data",
+              "displayName": "Data",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Horário",
+              "displayName": "Horário",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Campeonato",
+              "displayName": "Campeonato",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Mandante",
+              "displayName": "Mandante",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Visitante",
+              "displayName": "Visitante",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Agendado",
+                  "value": "Agendado"
+                },
+                {
+                  "name": "Ao vivo",
+                  "value": "Ao vivo"
+                },
+                {
+                  "name": "Encerrado",
+                  "value": "Encerrado"
+                },
+                {
+                  "name": "Adiado",
+                  "value": "Adiado"
+                },
+                {
+                  "name": "Cancelado",
+                  "value": "Cancelado"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Nota",
+              "displayName": "Nota",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Por que a nota",
+              "displayName": "Por que a nota",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Briefing",
+              "displayName": "Briefing",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        2672,
+        -176
+      ],
+      "id": "9085abf2-b4eb-42fb-b67d-3cdb6e86bc27",
+      "name": "Salvar no Airtable",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nó Code \"Montar mensagem\" (modo: Run Once for All Items)\n// Monta o resumo do dia em HTML do Telegram, uma mensagem por bloco (Brasil, Copas, Europa).\n// O Telegram aceita até 4096 caracteres por mensagem; se um bloco passar disso, ele é dividido.\n\nconst LIMITE = 3900;\nconst { data, jogos, llmFalhou, totalAnalisados } = $('Selecionar jogos').first().json;\nconst espnFalhou = $('Montar jogos do dia').first().json.espnFalhou;\n\nconst html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');\nconst dia = DateTime.fromISO(data).setLocale('pt-BR').toFormat(\"cccc, dd/MM\");\n\nconst blocos = [\n  { nome: 'Brasil', titulo: '🇧🇷 <b>BRASIL</b>' },\n  { nome: 'Copas', titulo: '🏆 <b>COPAS</b>' },\n  { nome: 'Europa', titulo: '🌍 <b>EUROPA</b>' },\n];\n\nconst cabecalho = jogos.length\n  ? `📅 <b>Pauta de hoje: ${html(dia)}</b>\\n${jogos.length} de ${totalAnalisados} jogos selecionados · 🔥 jogão · ⭐ bom jogo`\n  : `📅 <b>Pauta de hoje: ${html(dia)}</b>\\nHoje não tem jogos dos campeonatos acompanhados.`;\n\nconst avisos = [];\nif (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculadas pelo peso dos times, sem briefing.');\nif (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');\n\nconst mensagens = [];\nlet atual = cabecalho;\nconst fechar = () => { if (atual.trim()) mensagens.push(atual); atual = ''; };\nconst adicionar = (trecho) => {\n  if (atual && (atual + '\\n\\n' + trecho).length > LIMITE) fechar();\n  atual = atual ? `${atual}\\n\\n${trecho}` : trecho;\n};\n\nfor (const bloco of blocos) {\n  const doBloco = jogos.filter((j) => j.bloco === bloco.nome);\n  if (!doBloco.length) continue;\n  if (mensagens.length || atual !== cabecalho) fechar();\n  adicionar(bloco.titulo);\n  let campeonatoAtual = null;\n  for (const j of doBloco) {\n    const linhas = [];\n    if (j.campeonato !== campeonatoAtual) {\n      linhas.push(`<u>${html(j.campeonato)}</u>`);\n      campeonatoAtual = j.campeonato;\n    }\n    linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);\n    if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);\n    adicionar(linhas.join('\\n'));\n  }\n}\nif (avisos.length) adicionar(avisos.join('\\n'));\nfechar();\n\nreturn mensagens.map((texto) => ({ json: { texto } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        16
+      ],
+      "id": "a6cdfae2-d132-4d04-b135-89721b152cd0",
+      "name": "Montar mensagem"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -176,
+        -224
+      ],
+      "id": "33812bfe-82c7-46d4-a3cc-ebe186fa7d74",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Campeonatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campeonatos": {
+      "main": [
+        [
+          {
+            "node": "Times",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Times": {
+      "main": [
+        [
+          {
+            "node": "football-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "football-data": {
+      "main": [
+        [
+          {
+            "node": "ESPN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ESPN": {
+      "main": [
+        [
+          {
+            "node": "Montar jogos do dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar jogos do dia": {
+      "main": [
+        [
+          {
+            "node": "Ligas com classificação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar pedido ao Gemini": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligas com classificação": {
+      "main": [
+        [
+          {
+            "node": "Classificação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificação": {
+      "main": [
+        [
+          {
+            "node": "Preparar pedido ao Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Selecionar jogos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Selecionar jogos": {
+      "main": [
+        [
+          {
+            "node": "Separar jogos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Montar mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar jogos": {
+      "main": [
+        [
+          {
+            "node": "Salvar no Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar mensagem": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Campeonatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

@@ -1,0 +1,10 @@
+Nome,Código,Fonte,Bloco,Todos os jogos,Limite nota 4,Ordem,Ativo
+Brasileirão Série A,BSA,football-data,Brasil,true,,1,true
+Libertadores,CLI,football-data,Copas,true,,2,true
+Champions League,CL,football-data,Copas,,4,3,true
+Europa League,uefa.europa,ESPN,Copas,,2,4,true
+Premier League,PL,football-data,Europa,,3,5,true
+La Liga,PD,football-data,Europa,,2,6,true
+Serie A (Itália),SA,football-data,Europa,,2,7,true
+Bundesliga,BL1,football-data,Europa,,2,8,true
+Ligue 1,FL1,football-data,Europa,,2,9,true
