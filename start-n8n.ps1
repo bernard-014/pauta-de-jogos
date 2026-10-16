@@ -34,4 +34,34 @@ $env:EXECUTIONS_DATA_PRUNE = 'true'
 $env:EXECUTIONS_DATA_MAX_AGE = '168'          # em horas
 $env:DB_SQLITE_VACUUM_ON_STARTUP = 'true'
 
+# Ao subir o servidor, fecha antes qualquer n8n já aberto (evita porta 5678 ocupada e dois n8n no mesmo banco).
+# Só mexe nos processos do n8n instalado em D:\n8n; comandos como "execute" não fecham nada.
+if ($n8nArgs[0] -eq 'start') {
+    $antigos = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+        Where-Object { $_.CommandLine -like "*$n8nDir*" -and $_.ProcessId -ne $PID }
+    if ($antigos) {
+        Write-Host "Fechando n8n que já estava aberto ($(@($antigos).Count) processo(s))..."
+        $antigos | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Seconds 3
+    }
+}
+
+# Barra de progresso: o n8n não avisa quanto falta, então a barra é uma estimativa (90 s) e chega a 100% quando a porta abre.
+# Roda em paralelo ao n8n e escreve uma linha a cada 5 s, só para mostrar que não travou.
+if ($n8nArgs[0] -eq 'start') {
+    $barra = [powershell]::Create().AddScript({
+        $inicio = Get-Date
+        while ($true) {
+            $s = [int]((Get-Date) - $inicio).TotalSeconds
+            $aberta = $false
+            try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', 5678); $aberta = $true; $c.Close() } catch {}
+            if ($aberta) { [Console]::WriteLine("[##########] 100%  PRONTO em ${s}s: abra http://localhost:5678"); break }
+            $p = [Math]::Min(95, [int](100 * $s / 90)); $n = [int]($p / 10)
+            [Console]::WriteLine("[$('#' * $n)$('-' * (10 - $n))] $p%  iniciando o n8n, pode levar alguns minutos na primeira vez... (${s}s)")
+            Start-Sleep -Seconds 5
+        }
+    })
+    $null = $barra.BeginInvoke()
+}
+
 & (Join-Path $nodeDir 'node.exe') (Join-Path $n8nDir 'node_modules\n8n\bin\n8n') $n8nArgs
