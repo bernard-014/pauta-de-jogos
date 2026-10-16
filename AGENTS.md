@@ -53,8 +53,8 @@ _Última atualização: 2026-10-16, Claude Code._
 | Fontes em paralelo + Merge "Juntar fontes" | Pronto, commitado. |
 | Mensagem única no Telegram | Pronto, commitado. Só divide acima de 4096 caracteres. |
 | Janela da pauta 6h–6h | Pronto, commitado. |
-| Desfalques (lesões/suspensões) | Commitado na branch `desfalques` (falta juntar na `main` e fazer push). Lesões da ESPN enxugadas no nó Code `Lesões ESPN`. Publicado no n8n; coluna `Desfalques` criada no Airtable. NFL/NBA testados localmente com dados reais da ESPN e o Gemini real; **futebol só com resposta simulada**: falta o usuário criar a chave e a credencial `API-Football` no n8n e rodar o nó. |
-| Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` em `69c64a4` no último push. |
+| Desfalques (lesões/suspensões) | Na `main` (`ae22887`, push feito). Lesões da ESPN enxugadas no nó Code `Lesões ESPN`. Publicado no n8n; coluna `Desfalques` criada no Airtable. NFL/NBA testados localmente com dados reais da ESPN e o Gemini real; **futebol só com resposta simulada**: falta o usuário criar a chave e a credencial `API-Football` no n8n e rodar o nó. |
+| Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` em `ae22887` no último push. |
 
 ### Trabalho em andamento
 
@@ -220,8 +220,8 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
 
-- **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: os nós HTTP `ESPN NFL lesões` e `ESPN NBA lesões` viraram o nó Code `Lesões ESPN`, que devolve ~45 KB em vez de ~10 MB (`Juntar fontes` com 6 entradas). Limpeza automática de execuções no `start-n8n.ps1`. Aplicado no n8n e commitado na branch `desfalques`. Pendente: o usuário reiniciar o n8n pelo script para a limpeza valer.
-- **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques commitados na branch `desfalques` (README, MANUAL, ROADMAP, códigos e JSON). Coluna `Desfalques` criada na tabela Jogos pela API de metadados do Airtable. Pendente: juntar na `main` e push; credencial `API-Football` e teste do usuário no n8n.
+- **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: os nós HTTP `ESPN NFL lesões` e `ESPN NBA lesões` viraram o nó Code `Lesões ESPN`, que devolve ~45 KB em vez de ~10 MB (`Juntar fontes` com 6 entradas). Limpeza automática de execuções no `start-n8n.ps1`. Aplicado no n8n, na `main` com push (`ae22887`). Pendente: o usuário reiniciar o n8n pelo script para a limpeza valer.
+- **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques commitados (`e04a032`, na `main` com push). Coluna `Desfalques` criada na tabela Jogos pela API de metadados do Airtable. Pendente: credencial `API-Football` e teste do usuário no n8n.
 - **2026-10-16, Claude Code**: criados este `AGENTS.md` e o `CLAUDE.md` (que importa este arquivo), com a regra de mantê-lo atualizado a cada tarefa. Registrado o trabalho de desfalques, que outra sessão deixou em andamento sem commit.
 - **2026-10-16, Claude Code**: commit `69c64a4` na `main` (push feito): NFL e NBA (nós ESPN, 32 + 30 times, linhas em Campeonatos), fontes em paralelo com o Merge `Juntar fontes`, janela da pauta 6h–6h, mensagem única no Telegram, `Data` = dia da pauta. Tudo aplicado no n8n e no Airtable. Teste do usuário no n8n: OK (antes da mensagem única, que só foi testada localmente).
 - **2026-10-16, Claude Code (sessão "APIs gratuitas de lesões de jogadores")**: desfalques via ESPN e API-Football. Publicado no n8n, **não commitado** (ver Trabalho em andamento).
