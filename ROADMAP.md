@@ -5,7 +5,8 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 ## Novas ligas e esportes
 
 ### NFL (futebol americano)
-- [ ] Adicionar jogos da NFL ao resumo.
+- [x] Adicionar jogos da NFL ao resumo (nó **ESPN NFL**, bloco 🏈 na mensagem, 32 times na tabela Times, limite de 3 jogos nota 4 por dia).
+- [ ] Na pauta de segunda, incluir os resultados do domingo.
 - Status: temporada 2026 em andamento (começou em setembro).
 - Fonte de dados (grátis): endpoint público da ESPN, que o projeto já usa para a Europa League.
   `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`
@@ -15,7 +16,9 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
   - Os horários chegam em UTC; converter para o horário de Brasília.
 
 ### NBA (basquete)
-- [ ] Adicionar jogos da NBA ao resumo.
+- [x] Adicionar jogos da NBA ao resumo (nó **ESPN NBA**, bloco 🏀 na mensagem, 30 times na tabela Times, limite de 3 jogos nota 4 por dia). Testado com os jogos de pré-temporada.
+- [x] Jogos depois da meia-noite: a pauta passou a cobrir de hoje às 6h até amanhã às 6h.
+- [ ] Revisar os pesos dos times quando a temporada regular começar (força atual muda rápido na NBA).
 - Status: temporada 2026-27 começa no fim de outubro.
 - Fonte de dados (grátis): endpoint público da ESPN.
   `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard`

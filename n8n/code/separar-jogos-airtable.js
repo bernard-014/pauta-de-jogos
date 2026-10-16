@@ -2,12 +2,12 @@
 // Transforma a lista de jogos escolhidos em um item por jogo,
 // com as chaves iguais aos nomes das colunas da tabela Jogos no Airtable.
 
-const { jogos } = $('Selecionar jogos').first().json;
+const { data, jogos } = $('Selecionar jogos').first().json;
 
 return jogos.map((j) => ({
   json: {
     ID: j.id,
-    Data: j.horarioISO.slice(0, 10),
+    Data: data, // dia da pauta (um jogo às 00h30 continua na pauta de ontem)
     'Horário': j.horarioISO,
     Campeonato: [j.campeonatoId],
     Mandante: j.mandante,

@@ -26,6 +26,9 @@ const lista = jogos.map((j) => ({
   visitante: j.visitante,
   tabelaMandante: tabela.get(`${j.codigo}:${j.idMandante}`),
   tabelaVisitante: tabela.get(`${j.codigo}:${j.idVisitante}`),
+  campanhaMandante: j.campanhaMandante ?? undefined,
+  campanhaVisitante: j.campanhaVisitante ?? undefined,
+  extras: j.extras ?? undefined,
   pesoMandante: j.pesoMandante,
   pesoVisitante: j.pesoVisitante,
 }));
@@ -42,8 +45,20 @@ Critérios da nota:
 
 O peso dos times vem de uma lista mantida pela produção: 3 = gigante, 2 = forte, 0 = sem destaque.
 
+Jogos da NFL (futebol americano) usam os mesmos números, com estes critérios:
+5 = horário nobre (Sunday Night, Monday Night ou Thursday Night, pelo horário de Brasília à noite), jogo no Brasil ou fora dos EUA, playoff/Super Bowl, ou confronto entre duas campanhas fortes.
+4 = time popular no Brasil (peso 3) ou duelo de divisão com as duas equipes brigando por vaga.
+3 ou menos = jogo comum da rodada de domingo.
+Na NFL, "campanha" é vitórias-derrotas(-empates) na temporada e "rodada" é a semana (week). Nada de tabela de classificação.
+
+Jogos da NBA (basquete) também usam os mesmos números:
+5 = clássico (Lakers x Celtics, Knicks x Celtics, Lakers x Warriors etc.), jogo fora dos EUA, playoff/play-in/finais, ou confronto entre duas campanhas fortes.
+4 = pelo menos um time popular no Brasil (peso 3), jogo de abertura da temporada ou de Natal, ou duelo direto entre times do topo da conferência.
+3 ou menos = jogo comum da rodada (tem jogo quase todo dia).
+Pré-temporada (fase "Preseason") vale menos: no máximo 4, e só com time peso 3 ou clássico. Na NBA, "campanha" é vitórias-derrotas na fase indicada.
+
 Regras:
-- Use os dados de tabela fornecidos. Não invente resultados recentes, lesões, artilheiros, técnicos ou escalações.
+- Use os dados de tabela e campanha fornecidos. Não invente resultados recentes, lesões, artilheiros, técnicos ou escalações.
 - Brasileirão e Libertadores interessam mais ao público: na dúvida, suba a nota.
 - "motivo": uma frase curta explicando a nota.
 - "briefing": no máximo 2 frases, em português do Brasil, dizendo o que está em jogo. Tom de jornalista esportivo, sem exagero.

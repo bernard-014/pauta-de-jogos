@@ -12,7 +12,7 @@ Para quem trabalha na produção e usa a pauta no dia a dia. Nada aqui exige mex
 
 Abaixo de cada jogo vem um briefing de até duas frases escrito pelo LLM a partir da tabela de classificação. **Confira antes de usar no ar**: o modelo é instruído a não inventar lesões, escalações ou resultados, mas ainda é um texto gerado.
 
-Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League pode estar faltando.
+Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando.
 
 ## Onde ver todos os jogos
 
@@ -38,7 +38,7 @@ Tabela **Campeonatos**:
 - **Todos os jogos** marcado: entram todos os jogos daquele campeonato, sem filtro.
 - **Limite nota 4**: quantos jogos "bons" (nota 4) entram por dia. Jogos nota 5 entram sempre.
 - **Ordem**: posição do campeonato dentro da mensagem.
-- **Bloco**: em qual parte da mensagem ele aparece (Brasil, Copas ou Europa).
+- **Bloco**: em qual parte da mensagem ele aparece (Brasil, Copas, Europa, NFL ou NBA).
 
 ### Dizer que um time importa mais
 Tabela **Times**:
@@ -53,9 +53,9 @@ Tabela **Times**:
 | Campo | Tipo |
 |---|---|
 | Nome | Texto |
-| Código | Texto (código da API: `BSA`, `CLI`, `CL`, `PL`, `PD`, `SA`, `BL1`, `FL1`, `uefa.europa`) |
+| Código | Texto (código da API: `BSA`, `CLI`, `CL`, `PL`, `PD`, `SA`, `BL1`, `FL1`, `uefa.europa`, `nfl`) |
 | Fonte | Seleção: `football-data`, `ESPN` |
-| Bloco | Seleção: `Brasil`, `Copas`, `Europa` |
+| Bloco | Seleção: `Brasil`, `Copas`, `Europa`, `NFL`, `NBA` |
 | Todos os jogos | Checkbox |
 | Limite nota 4 | Número inteiro |
 | Ordem | Número inteiro |

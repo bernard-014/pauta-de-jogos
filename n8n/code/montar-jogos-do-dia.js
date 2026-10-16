@@ -1,9 +1,13 @@
 // Nó Code "Montar jogos do dia" (modo: Run Once for All Items)
-// Junta os jogos da football-data e da ESPN, converte para o horário de Brasília,
-// fica só com os jogos de hoje e marca o peso de cada time a partir da tabela Times.
+// Junta os jogos da football-data e da ESPN (Europa League, NFL e NBA), converte para o horário de Brasília,
+// fica só com os jogos da pauta de hoje e marca o peso de cada time a partir da tabela Times.
 
 const TZ = 'America/Sao_Paulo';
-const hoje = $now.setZone(TZ).toFormat('yyyy-MM-dd');
+const agora = $now.setZone(TZ);
+const hoje = agora.toFormat('yyyy-MM-dd');
+// A pauta cobre de hoje às 6h até amanhã às 6h: jogo da NBA às 00h30 de Brasília ainda é "de hoje".
+const inicioPauta = agora.startOf('day').plus({ hours: 6 });
+const fimPauta = inicioPauta.plus({ days: 1 });
 
 // O nó do Airtable devolve os campos soltos no item; este helper aceita os dois formatos.
 const campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });
@@ -35,7 +39,7 @@ const adicionar = (codigo, jogo) => {
   const c = campeonatos[codigo];
   if (!c) return;
   const inicio = DateTime.fromISO(jogo.utc, { zone: 'utc' }).setZone(TZ);
-  if (inicio.toFormat('yyyy-MM-dd') !== hoje) return;
+  if (inicio < inicioPauta || inicio >= fimPauta) return;
   const pesoMandante = jogo.timeMandante?.peso ?? 0;
   const pesoVisitante = jogo.timeVisitante?.peso ?? 0;
   jogos.push({
@@ -59,6 +63,9 @@ const adicionar = (codigo, jogo) => {
     status: jogo.status,
     fase: jogo.fase ?? null,
     rodada: jogo.rodada ?? null,
+    campanhaMandante: jogo.campanhaMandante ?? null,
+    campanhaVisitante: jogo.campanhaVisitante ?? null,
+    extras: jogo.extras ?? null,
   });
 };
 
@@ -83,28 +90,49 @@ for (const m of $('football-data').first().json.matches ?? []) {
   });
 }
 
-// ESPN (só Europa League). Se a ESPN falhar, o nó segue sem esses jogos.
+// ESPN: Europa League (nó "ESPN"), NFL (nó "ESPN NFL") e NBA (nó "ESPN NBA"). O código do campeonato
+// é o slug da liga na ESPN (uefa.europa, nfl, nba). Se uma chamada falhar, o fluxo segue sem esses jogos.
 const statusESPN = (s) => {
   if (s.name === 'STATUS_POSTPONED') return 'Adiado';
   if (s.name === 'STATUS_CANCELED') return 'Cancelado';
   return { pre: 'Agendado', in: 'Ao vivo', post: 'Encerrado' }[s.state] ?? s.name;
 };
-const espn = $('ESPN').first().json;
-for (const ev of espn.events ?? []) {
-  const lados = ev.competitions[0].competitors;
-  const casa = lados.find((l) => l.homeAway === 'home').team;
-  const fora = lados.find((l) => l.homeAway === 'away').team;
-  adicionar(espn.leagues?.[0]?.slug ?? 'uefa.europa', {
-    id: `espn-${ev.id}`,
-    utc: ev.date,
-    mandante: casa.shortDisplayName ?? casa.displayName,
-    visitante: fora.shortDisplayName ?? fora.displayName,
-    timeMandante: acharTime(casa.displayName, casa.shortDisplayName),
-    timeVisitante: acharTime(fora.displayName, fora.shortDisplayName),
-    status: statusESPN(ev.status.type),
-  });
-}
+const lerESPN = (no, slugPadrao) => {
+  const espn = $(no).first().json;
+  for (const ev of espn.events ?? []) {
+    const comp = ev.competitions[0];
+    const lados = comp.competitors;
+    const casa = lados.find((l) => l.homeAway === 'home');
+    const fora = lados.find((l) => l.homeAway === 'away');
+    // Contexto extra que a ESPN já entrega no placar (útil para o Gemini na NFL)
+    const tv = (comp.broadcasts ?? []).flatMap((b) => b.names ?? []).join(', ');
+    const local = comp.venue?.address;
+    const extras = [
+      ...(comp.notes ?? []).map((n) => n.headline),
+      comp.neutralSite && local?.country ? `Campo neutro: ${[local.city, local.country].filter(Boolean).join(', ')}` : null,
+      tv ? `TV nos EUA: ${tv}` : null,
+    ].filter(Boolean);
+    adicionar(espn.leagues?.[0]?.slug ?? slugPadrao, {
+      id: `espn-${ev.id}`,
+      utc: ev.date,
+      mandante: casa.team.shortDisplayName ?? casa.team.displayName,
+      visitante: fora.team.shortDisplayName ?? fora.team.displayName,
+      timeMandante: acharTime(casa.team.displayName, casa.team.shortDisplayName),
+      timeVisitante: acharTime(fora.team.displayName, fora.team.shortDisplayName),
+      campanhaMandante: casa.records?.[0]?.summary,
+      campanhaVisitante: fora.records?.[0]?.summary,
+      status: statusESPN(ev.status.type),
+      fase: espn.leagues?.[0]?.season?.type?.name ?? null,
+      rodada: espn.week?.number ?? null,
+      extras: extras.join(' · ') || null,
+    });
+  }
+  return !!espn.error;
+};
+const espnFalhou = lerESPN('ESPN', 'uefa.europa');
+const nflFalhou = lerESPN('ESPN NFL', 'nfl');
+const nbaFalhou = lerESPN('ESPN NBA', 'nba');
 
 jogos.sort((a, b) => a.ordem - b.ordem || a.horarioISO.localeCompare(b.horarioISO));
 
-return [{ json: { data: hoje, total: jogos.length, jogos, espnFalhou: !!espn.error } }];
+return [{ json: { data: hoje, total: jogos.length, jogos, espnFalhou, nflFalhou, nbaFalhou } }];

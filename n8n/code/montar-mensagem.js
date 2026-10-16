@@ -1,10 +1,10 @@
 // Nó Code "Montar mensagem" (modo: Run Once for All Items)
-// Monta o resumo do dia em HTML do Telegram, uma mensagem por bloco (Brasil, Copas, Europa).
-// O Telegram aceita até 4096 caracteres por mensagem; se um bloco passar disso, ele é dividido.
+// Monta o resumo do dia em HTML do Telegram: uma mensagem só, separada por blocos (Brasil, Copas, Europa, NFL, NBA).
+// O Telegram aceita até 4096 caracteres por mensagem; só se passar disso o texto é dividido em mais de uma.
 
 const LIMITE = 3900;
 const { data, jogos, llmFalhou, totalAnalisados } = $('Selecionar jogos').first().json;
-const espnFalhou = $('Montar jogos do dia').first().json.espnFalhou;
+const { espnFalhou, nflFalhou, nbaFalhou } = $('Montar jogos do dia').first().json;
 
 const html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');
@@ -14,6 +14,8 @@ const blocos = [
   { nome: 'Brasil', titulo: '🇧🇷 <b>BRASIL</b>' },
   { nome: 'Copas', titulo: '🏆 <b>COPAS</b>' },
   { nome: 'Europa', titulo: '🌍 <b>EUROPA</b>' },
+  { nome: 'NFL', titulo: '🏈 <b>NFL</b>' },
+  { nome: 'NBA', titulo: '🏀 <b>NBA</b>' },
 ];
 
 const cabecalho = jogos.length
@@ -23,6 +25,8 @@ const cabecalho = jogos.length
 const avisos = [];
 if (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculadas pelo peso dos times, sem briefing.');
 if (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');
+if (nflFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NFL podem estar faltando.');
+if (nbaFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NBA podem estar faltando.');
 
 const mensagens = [];
 let atual = cabecalho;
@@ -35,13 +39,13 @@ const adicionar = (trecho) => {
 for (const bloco of blocos) {
   const doBloco = jogos.filter((j) => j.bloco === bloco.nome);
   if (!doBloco.length) continue;
-  if (mensagens.length || atual !== cabecalho) fechar();
   adicionar(bloco.titulo);
   let campeonatoAtual = null;
   for (const j of doBloco) {
     const linhas = [];
+    // Subtítulo do campeonato, menos quando repete o nome do bloco (NFL, NBA)
     if (j.campeonato !== campeonatoAtual) {
-      linhas.push(`<u>${html(j.campeonato)}</u>`);
+      if (j.campeonato !== bloco.nome) linhas.push(`<u>${html(j.campeonato)}</u>`);
       campeonatoAtual = j.campeonato;
     }
     linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);

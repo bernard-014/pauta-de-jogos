@@ -127,7 +127,7 @@
       "typeVersion": 4.5,
       "position": [
         528,
-        -112
+        -304
       ],
       "id": "a01b724e-1b4a-4851-b61b-ed9f73c6c973",
       "name": "football-data",
@@ -156,7 +156,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        752,
+        528,
         -112
       ],
       "id": "83aa91a5-7583-455f-aa31-c7aa2043574d",
@@ -166,7 +166,70 @@
     },
     {
       "parameters": {
-        "jsCode": "// Nó Code \"Montar jogos do dia\" (modo: Run Once for All Items)\n// Junta os jogos da football-data e da ESPN, converte para o horário de Brasília,\n// fica só com os jogos de hoje e marca o peso de cada time a partir da tabela Times.\n\nconst TZ = 'America/Sao_Paulo';\nconst hoje = $now.setZone(TZ).toFormat('yyyy-MM-dd');\n\n// O nó do Airtable devolve os campos soltos no item; este helper aceita os dois formatos.\nconst campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });\n\n// Campeonatos ativos, indexados pelo código usado na API\nconst campeonatos = {};\nfor (const c of $('Campeonatos').all().map(campos)) {\n  if (c.Ativo) campeonatos[c['Código']] = c;\n}\n\n// Peso dos times: cada grafia em \"Nomes nas APIs\" aponta para o time\nconst semAcento = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();\nconst times = new Map();\nfor (const t of $('Times').all().map(campos)) {\n  for (const nome of (t['Nomes nas APIs'] ?? '').split(',')) {\n    if (nome.trim()) times.set(semAcento(nome), { nome: t.Nome, peso: t.Peso ?? 1 });\n  }\n}\nconst acharTime = (...nomes) => {\n  for (const n of nomes) {\n    const t = times.get(semAcento(n));\n    if (t) return t;\n  }\n  return null;\n};\n\nconst jogos = [];\nconst adicionar = (codigo, jogo) => {\n  const c = campeonatos[codigo];\n  if (!c) return;\n  const inicio = DateTime.fromISO(jogo.utc, { zone: 'utc' }).setZone(TZ);\n  if (inicio.toFormat('yyyy-MM-dd') !== hoje) return;\n  const pesoMandante = jogo.timeMandante?.peso ?? 0;\n  const pesoVisitante = jogo.timeVisitante?.peso ?? 0;\n  jogos.push({\n    id: jogo.id,\n    campeonato: c.Nome,\n    campeonatoId: c.id,\n    codigo,\n    bloco: c.Bloco,\n    ordem: c.Ordem ?? 99,\n    todosOsJogos: !!c['Todos os jogos'],\n    limiteNota4: c['Limite nota 4'] ?? 0,\n    horario: inicio.toFormat('HH:mm'),\n    horarioISO: inicio.toISO(),\n    mandante: jogo.mandante,\n    visitante: jogo.visitante,\n    idMandante: jogo.idMandante ?? null,\n    idVisitante: jogo.idVisitante ?? null,\n    pesoMandante,\n    pesoVisitante,\n    pesoTotal: pesoMandante + pesoVisitante,\n    status: jogo.status,\n    fase: jogo.fase ?? null,\n    rodada: jogo.rodada ?? null,\n  });\n};\n\n// football-data.org\nconst statusFD = {\n  SCHEDULED: 'Agendado', TIMED: 'Agendado', IN_PLAY: 'Ao vivo', PAUSED: 'Ao vivo',\n  FINISHED: 'Encerrado', AWARDED: 'Encerrado', POSTPONED: 'Adiado', SUSPENDED: 'Adiado', CANCELLED: 'Cancelado',\n};\nfor (const m of $('football-data').first().json.matches ?? []) {\n  adicionar(m.competition.code, {\n    id: `fd-${m.id}`,\n    utc: m.utcDate,\n    mandante: m.homeTeam.shortName ?? m.homeTeam.name,\n    visitante: m.awayTeam.shortName ?? m.awayTeam.name,\n    idMandante: m.homeTeam.id,\n    idVisitante: m.awayTeam.id,\n    timeMandante: acharTime(m.homeTeam.name, m.homeTeam.shortName),\n    timeVisitante: acharTime(m.awayTeam.name, m.awayTeam.shortName),\n    status: statusFD[m.status] ?? m.status,\n    fase: m.stage,\n    rodada: m.matchday,\n  });\n}\n\n// ESPN (só Europa League). Se a ESPN falhar, o nó segue sem esses jogos.\nconst statusESPN = (s) => {\n  if (s.name === 'STATUS_POSTPONED') return 'Adiado';\n  if (s.name === 'STATUS_CANCELED') return 'Cancelado';\n  return { pre: 'Agendado', in: 'Ao vivo', post: 'Encerrado' }[s.state] ?? s.name;\n};\nconst espn = $('ESPN').first().json;\nfor (const ev of espn.events ?? []) {\n  const lados = ev.competitions[0].competitors;\n  const casa = lados.find((l) => l.homeAway === 'home').team;\n  const fora = lados.find((l) => l.homeAway === 'away').team;\n  adicionar(espn.leagues?.[0]?.slug ?? 'uefa.europa', {\n    id: `espn-${ev.id}`,\n    utc: ev.date,\n    mandante: casa.shortDisplayName ?? casa.displayName,\n    visitante: fora.shortDisplayName ?? fora.displayName,\n    timeMandante: acharTime(casa.displayName, casa.shortDisplayName),\n    timeVisitante: acharTime(fora.displayName, fora.shortDisplayName),\n    status: statusESPN(ev.status.type),\n  });\n}\n\njogos.sort((a, b) => a.ordem - b.ordem || a.horarioISO.localeCompare(b.horarioISO));\n\nreturn [{ json: { data: hoje, total: jogos.length, jogos, espnFalhou: !!espn.error } }];\n"
+        "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dates",
+              "value": "={{ $now.setZone('America/Sao_Paulo').toFormat('yyyyMMdd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        528,
+        80
+      ],
+      "id": "4bc0bd55-589f-4ec2-8bbc-cfcddac71b56",
+      "name": "ESPN NFL",
+      "executeOnce": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dates",
+              "value": "={{ $now.setZone('America/Sao_Paulo').toFormat('yyyyMMdd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        528,
+        272
+      ],
+      "id": "b2d6e0a4-5f1c-4e7b-9a3d-8c2f1e6b7d95",
+      "name": "ESPN NBA",
+      "executeOnce": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        752,
+        -112
+      ],
+      "id": "7c1e2f40-9b3d-4e5a-a6c1-3f8d2b9e4a10",
+      "name": "Juntar fontes"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nó Code \"Montar jogos do dia\" (modo: Run Once for All Items)\n// Junta os jogos da football-data e da ESPN (Europa League, NFL e NBA), converte para o horário de Brasília,\n// fica só com os jogos da pauta de hoje e marca o peso de cada time a partir da tabela Times.\n\nconst TZ = 'America/Sao_Paulo';\nconst agora = $now.setZone(TZ);\nconst hoje = agora.toFormat('yyyy-MM-dd');\n// A pauta cobre de hoje às 6h até amanhã às 6h: jogo da NBA às 00h30 de Brasília ainda é \"de hoje\".\nconst inicioPauta = agora.startOf('day').plus({ hours: 6 });\nconst fimPauta = inicioPauta.plus({ days: 1 });\n\n// O nó do Airtable devolve os campos soltos no item; este helper aceita os dois formatos.\nconst campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });\n\n// Campeonatos ativos, indexados pelo código usado na API\nconst campeonatos = {};\nfor (const c of $('Campeonatos').all().map(campos)) {\n  if (c.Ativo) campeonatos[c['Código']] = c;\n}\n\n// Peso dos times: cada grafia em \"Nomes nas APIs\" aponta para o time\nconst semAcento = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();\nconst times = new Map();\nfor (const t of $('Times').all().map(campos)) {\n  for (const nome of (t['Nomes nas APIs'] ?? '').split(',')) {\n    if (nome.trim()) times.set(semAcento(nome), { nome: t.Nome, peso: t.Peso ?? 1 });\n  }\n}\nconst acharTime = (...nomes) => {\n  for (const n of nomes) {\n    const t = times.get(semAcento(n));\n    if (t) return t;\n  }\n  return null;\n};\n\nconst jogos = [];\nconst adicionar = (codigo, jogo) => {\n  const c = campeonatos[codigo];\n  if (!c) return;\n  const inicio = DateTime.fromISO(jogo.utc, { zone: 'utc' }).setZone(TZ);\n  if (inicio < inicioPauta || inicio >= fimPauta) return;\n  const pesoMandante = jogo.timeMandante?.peso ?? 0;\n  const pesoVisitante = jogo.timeVisitante?.peso ?? 0;\n  jogos.push({\n    id: jogo.id,\n    campeonato: c.Nome,\n    campeonatoId: c.id,\n    codigo,\n    bloco: c.Bloco,\n    ordem: c.Ordem ?? 99,\n    todosOsJogos: !!c['Todos os jogos'],\n    limiteNota4: c['Limite nota 4'] ?? 0,\n    horario: inicio.toFormat('HH:mm'),\n    horarioISO: inicio.toISO(),\n    mandante: jogo.mandante,\n    visitante: jogo.visitante,\n    idMandante: jogo.idMandante ?? null,\n    idVisitante: jogo.idVisitante ?? null,\n    pesoMandante,\n    pesoVisitante,\n    pesoTotal: pesoMandante + pesoVisitante,\n    status: jogo.status,\n    fase: jogo.fase ?? null,\n    rodada: jogo.rodada ?? null,\n    campanhaMandante: jogo.campanhaMandante ?? null,\n    campanhaVisitante: jogo.campanhaVisitante ?? null,\n    extras: jogo.extras ?? null,\n  });\n};\n\n// football-data.org\nconst statusFD = {\n  SCHEDULED: 'Agendado', TIMED: 'Agendado', IN_PLAY: 'Ao vivo', PAUSED: 'Ao vivo',\n  FINISHED: 'Encerrado', AWARDED: 'Encerrado', POSTPONED: 'Adiado', SUSPENDED: 'Adiado', CANCELLED: 'Cancelado',\n};\nfor (const m of $('football-data').first().json.matches ?? []) {\n  adicionar(m.competition.code, {\n    id: `fd-${m.id}`,\n    utc: m.utcDate,\n    mandante: m.homeTeam.shortName ?? m.homeTeam.name,\n    visitante: m.awayTeam.shortName ?? m.awayTeam.name,\n    idMandante: m.homeTeam.id,\n    idVisitante: m.awayTeam.id,\n    timeMandante: acharTime(m.homeTeam.name, m.homeTeam.shortName),\n    timeVisitante: acharTime(m.awayTeam.name, m.awayTeam.shortName),\n    status: statusFD[m.status] ?? m.status,\n    fase: m.stage,\n    rodada: m.matchday,\n  });\n}\n\n// ESPN: Europa League (nó \"ESPN\"), NFL (nó \"ESPN NFL\") e NBA (nó \"ESPN NBA\"). O código do campeonato\n// é o slug da liga na ESPN (uefa.europa, nfl, nba). Se uma chamada falhar, o fluxo segue sem esses jogos.\nconst statusESPN = (s) => {\n  if (s.name === 'STATUS_POSTPONED') return 'Adiado';\n  if (s.name === 'STATUS_CANCELED') return 'Cancelado';\n  return { pre: 'Agendado', in: 'Ao vivo', post: 'Encerrado' }[s.state] ?? s.name;\n};\nconst lerESPN = (no, slugPadrao) => {\n  const espn = $(no).first().json;\n  for (const ev of espn.events ?? []) {\n    const comp = ev.competitions[0];\n    const lados = comp.competitors;\n    const casa = lados.find((l) => l.homeAway === 'home');\n    const fora = lados.find((l) => l.homeAway === 'away');\n    // Contexto extra que a ESPN já entrega no placar (útil para o Gemini na NFL)\n    const tv = (comp.broadcasts ?? []).flatMap((b) => b.names ?? []).join(', ');\n    const local = comp.venue?.address;\n    const extras = [\n      ...(comp.notes ?? []).map((n) => n.headline),\n      comp.neutralSite && local?.country ? `Campo neutro: ${[local.city, local.country].filter(Boolean).join(', ')}` : null,\n      tv ? `TV nos EUA: ${tv}` : null,\n    ].filter(Boolean);\n    adicionar(espn.leagues?.[0]?.slug ?? slugPadrao, {\n      id: `espn-${ev.id}`,\n      utc: ev.date,\n      mandante: casa.team.shortDisplayName ?? casa.team.displayName,\n      visitante: fora.team.shortDisplayName ?? fora.team.displayName,\n      timeMandante: acharTime(casa.team.displayName, casa.team.shortDisplayName),\n      timeVisitante: acharTime(fora.team.displayName, fora.team.shortDisplayName),\n      campanhaMandante: casa.records?.[0]?.summary,\n      campanhaVisitante: fora.records?.[0]?.summary,\n      status: statusESPN(ev.status.type),\n      fase: espn.leagues?.[0]?.season?.type?.name ?? null,\n      rodada: espn.week?.number ?? null,\n      extras: extras.join(' · ') || null,\n    });\n  }\n  return !!espn.error;\n};\nconst espnFalhou = lerESPN('ESPN', 'uefa.europa');\nconst nflFalhou = lerESPN('ESPN NFL', 'nfl');\nconst nbaFalhou = lerESPN('ESPN NBA', 'nba');\n\njogos.sort((a, b) => a.ordem - b.ordem || a.horarioISO.localeCompare(b.horarioISO));\n\nreturn [{ json: { data: hoje, total: jogos.length, jogos, espnFalhou, nflFalhou, nbaFalhou } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -216,7 +279,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Nó Code \"Preparar pedido ao Gemini\" (modo: Run Once for All Items)\n// Junta cada jogo com a posição dos times na tabela e monta o corpo da chamada ao Gemini,\n// pedindo a resposta em JSON com formato fixo (responseSchema).\n\nconst { data, jogos } = $('Montar jogos do dia').first().json;\n\n// Posição de cada time por campeonato (o Bayern tem uma posição na Bundesliga e outra na Champions)\nconst tabela = new Map();\nfor (const item of $('Classificação').all()) {\n  const codigo = item.json.competition?.code;\n  for (const s of item.json.standings ?? []) {\n    if (s.type !== 'TOTAL') continue;\n    for (const linha of s.table) {\n      tabela.set(`${codigo}:${linha.team.id}`, `${linha.position}º de ${s.table.length}, ${linha.points} pts em ${linha.playedGames} jogos`);\n    }\n  }\n}\n\nconst lista = jogos.map((j) => ({\n  id: j.id,\n  campeonato: j.campeonato,\n  fase: j.fase ?? undefined,\n  rodada: j.rodada ?? undefined,\n  horario: j.horario,\n  mandante: j.mandante,\n  visitante: j.visitante,\n  tabelaMandante: tabela.get(`${j.codigo}:${j.idMandante}`),\n  tabelaVisitante: tabela.get(`${j.codigo}:${j.idVisitante}`),\n  pesoMandante: j.pesoMandante,\n  pesoVisitante: j.pesoVisitante,\n}));\n\nconst instrucoes = `Você é editor de pauta de um canal de esportes brasileiro.\nPara cada jogo, dê uma nota de relevância de 1 a 5 para o público brasileiro e escreva um briefing.\n\nCritérios da nota:\n5 = jogão: clássico ou rivalidade histórica, confronto direto entre times do topo da tabela, decisão (mata-mata, final) ou time brasileiro decidindo título ou vaga.\n4 = jogo bom: pelo menos um time gigante (peso 3) ou confronto entre times da parte de cima da tabela.\n3 = interessante só para quem acompanha o campeonato.\n2 = jogo comum.\n1 = pouco relevante.\n\nO peso dos times vem de uma lista mantida pela produção: 3 = gigante, 2 = forte, 0 = sem destaque.\n\nRegras:\n- Use os dados de tabela fornecidos. Não invente resultados recentes, lesões, artilheiros, técnicos ou escalações.\n- Brasileirão e Libertadores interessam mais ao público: na dúvida, suba a nota.\n- \"motivo\": uma frase curta explicando a nota.\n- \"briefing\": no máximo 2 frases, em português do Brasil, dizendo o que está em jogo. Tom de jornalista esportivo, sem exagero.\n- Avalie todos os jogos recebidos e devolva cada um com o mesmo id.`;\n\nconst body = {\n  systemInstruction: { parts: [{ text: instrucoes }] },\n  contents: [{ role: 'user', parts: [{ text: `Jogos de ${data}:\\n${JSON.stringify(lista, null, 1)}` }] }],\n  generationConfig: {\n    temperature: 0.4,\n    responseMimeType: 'application/json',\n    responseSchema: {\n      type: 'OBJECT',\n      properties: {\n        jogos: {\n          type: 'ARRAY',\n          items: {\n            type: 'OBJECT',\n            properties: {\n              id: { type: 'STRING' },\n              nota: { type: 'INTEGER' },\n              motivo: { type: 'STRING' },\n              briefing: { type: 'STRING' },\n            },\n            required: ['id', 'nota', 'motivo', 'briefing'],\n          },\n        },\n      },\n      required: ['jogos'],\n    },\n  },\n};\n\nreturn [{ json: { totalJogos: jogos.length, body } }];"
+        "jsCode": "// Nó Code \"Preparar pedido ao Gemini\" (modo: Run Once for All Items)\n// Junta cada jogo com a posição dos times na tabela e monta o corpo da chamada ao Gemini,\n// pedindo a resposta em JSON com formato fixo (responseSchema).\n\nconst { data, jogos } = $('Montar jogos do dia').first().json;\n\n// Posição de cada time por campeonato (o Bayern tem uma posição na Bundesliga e outra na Champions)\nconst tabela = new Map();\nfor (const item of $('Classificação').all()) {\n  const codigo = item.json.competition?.code;\n  for (const s of item.json.standings ?? []) {\n    if (s.type !== 'TOTAL') continue;\n    for (const linha of s.table) {\n      tabela.set(`${codigo}:${linha.team.id}`, `${linha.position}º de ${s.table.length}, ${linha.points} pts em ${linha.playedGames} jogos`);\n    }\n  }\n}\n\nconst lista = jogos.map((j) => ({\n  id: j.id,\n  campeonato: j.campeonato,\n  fase: j.fase ?? undefined,\n  rodada: j.rodada ?? undefined,\n  horario: j.horario,\n  mandante: j.mandante,\n  visitante: j.visitante,\n  tabelaMandante: tabela.get(`${j.codigo}:${j.idMandante}`),\n  tabelaVisitante: tabela.get(`${j.codigo}:${j.idVisitante}`),\n  campanhaMandante: j.campanhaMandante ?? undefined,\n  campanhaVisitante: j.campanhaVisitante ?? undefined,\n  extras: j.extras ?? undefined,\n  pesoMandante: j.pesoMandante,\n  pesoVisitante: j.pesoVisitante,\n}));\n\nconst instrucoes = `Você é editor de pauta de um canal de esportes brasileiro.\nPara cada jogo, dê uma nota de relevância de 1 a 5 para o público brasileiro e escreva um briefing.\n\nCritérios da nota:\n5 = jogão: clássico ou rivalidade histórica, confronto direto entre times do topo da tabela, decisão (mata-mata, final) ou time brasileiro decidindo título ou vaga.\n4 = jogo bom: pelo menos um time gigante (peso 3) ou confronto entre times da parte de cima da tabela.\n3 = interessante só para quem acompanha o campeonato.\n2 = jogo comum.\n1 = pouco relevante.\n\nO peso dos times vem de uma lista mantida pela produção: 3 = gigante, 2 = forte, 0 = sem destaque.\n\nJogos da NFL (futebol americano) usam os mesmos números, com estes critérios:\n5 = horário nobre (Sunday Night, Monday Night ou Thursday Night, pelo horário de Brasília à noite), jogo no Brasil ou fora dos EUA, playoff/Super Bowl, ou confronto entre duas campanhas fortes.\n4 = time popular no Brasil (peso 3) ou duelo de divisão com as duas equipes brigando por vaga.\n3 ou menos = jogo comum da rodada de domingo.\nNa NFL, \"campanha\" é vitórias-derrotas(-empates) na temporada e \"rodada\" é a semana (week). Nada de tabela de classificação.\n\nJogos da NBA (basquete) também usam os mesmos números:\n5 = clássico (Lakers x Celtics, Knicks x Celtics, Lakers x Warriors etc.), jogo fora dos EUA, playoff/play-in/finais, ou confronto entre duas campanhas fortes.\n4 = pelo menos um time popular no Brasil (peso 3), jogo de abertura da temporada ou de Natal, ou duelo direto entre times do topo da conferência.\n3 ou menos = jogo comum da rodada (tem jogo quase todo dia).\nPré-temporada (fase \"Preseason\") vale menos: no máximo 4, e só com time peso 3 ou clássico. Na NBA, \"campanha\" é vitórias-derrotas na fase indicada.\n\nRegras:\n- Use os dados de tabela e campanha fornecidos. Não invente resultados recentes, lesões, artilheiros, técnicos ou escalações.\n- Brasileirão e Libertadores interessam mais ao público: na dúvida, suba a nota.\n- \"motivo\": uma frase curta explicando a nota.\n- \"briefing\": no máximo 2 frases, em português do Brasil, dizendo o que está em jogo. Tom de jornalista esportivo, sem exagero.\n- Avalie todos os jogos recebidos e devolva cada um com o mesmo id.`;\n\nconst body = {\n  systemInstruction: { parts: [{ text: instrucoes }] },\n  contents: [{ role: 'user', parts: [{ text: `Jogos de ${data}:\\n${JSON.stringify(lista, null, 1)}` }] }],\n  generationConfig: {\n    temperature: 0.4,\n    responseMimeType: 'application/json',\n    responseSchema: {\n      type: 'OBJECT',\n      properties: {\n        jogos: {\n          type: 'ARRAY',\n          items: {\n            type: 'OBJECT',\n            properties: {\n              id: { type: 'STRING' },\n              nota: { type: 'INTEGER' },\n              motivo: { type: 'STRING' },\n              briefing: { type: 'STRING' },\n            },\n            required: ['id', 'nota', 'motivo', 'briefing'],\n          },\n        },\n      },\n      required: ['jogos'],\n    },\n  },\n};\n\nreturn [{ json: { totalJogos: jogos.length, body } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -271,7 +334,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Nó Code \"Separar jogos\" (modo: Run Once for All Items)\n// Transforma a lista de jogos escolhidos em um item por jogo,\n// com as chaves iguais aos nomes das colunas da tabela Jogos no Airtable.\n\nconst { jogos } = $('Selecionar jogos').first().json;\n\nreturn jogos.map((j) => ({\n  json: {\n    ID: j.id,\n    Data: j.horarioISO.slice(0, 10),\n    'Horário': j.horarioISO,\n    Campeonato: [j.campeonatoId],\n    Mandante: j.mandante,\n    Visitante: j.visitante,\n    Status: j.status,\n    Nota: j.nota,\n    'Por que a nota': j.motivo,\n    Briefing: j.briefing,\n  },\n}));\n"
+        "jsCode": "// Nó Code \"Separar jogos\" (modo: Run Once for All Items)\n// Transforma a lista de jogos escolhidos em um item por jogo,\n// com as chaves iguais aos nomes das colunas da tabela Jogos no Airtable.\n\nconst { data, jogos } = $('Selecionar jogos').first().json;\n\nreturn jogos.map((j) => ({\n  json: {\n    ID: j.id,\n    Data: data, // dia da pauta (um jogo às 00h30 continua na pauta de ontem)\n    'Horário': j.horarioISO,\n    Campeonato: [j.campeonatoId],\n    Mandante: j.mandante,\n    Visitante: j.visitante,\n    Status: j.status,\n    Nota: j.nota,\n    'Por que a nota': j.motivo,\n    Briefing: j.briefing,\n  },\n}));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -469,7 +532,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Nó Code \"Montar mensagem\" (modo: Run Once for All Items)\n// Monta o resumo do dia em HTML do Telegram, uma mensagem por bloco (Brasil, Copas, Europa).\n// O Telegram aceita até 4096 caracteres por mensagem; se um bloco passar disso, ele é dividido.\n\nconst LIMITE = 3900;\nconst { data, jogos, llmFalhou, totalAnalisados } = $('Selecionar jogos').first().json;\nconst espnFalhou = $('Montar jogos do dia').first().json.espnFalhou;\n\nconst html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');\nconst dia = DateTime.fromISO(data).setLocale('pt-BR').toFormat(\"cccc, dd/MM\");\n\nconst blocos = [\n  { nome: 'Brasil', titulo: '🇧🇷 <b>BRASIL</b>' },\n  { nome: 'Copas', titulo: '🏆 <b>COPAS</b>' },\n  { nome: 'Europa', titulo: '🌍 <b>EUROPA</b>' },\n];\n\nconst cabecalho = jogos.length\n  ? `📅 <b>Pauta de hoje: ${html(dia)}</b>\\n${jogos.length} de ${totalAnalisados} jogos selecionados · 🔥 jogão · ⭐ bom jogo`\n  : `📅 <b>Pauta de hoje: ${html(dia)}</b>\\nHoje não tem jogos dos campeonatos acompanhados.`;\n\nconst avisos = [];\nif (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculadas pelo peso dos times, sem briefing.');\nif (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');\n\nconst mensagens = [];\nlet atual = cabecalho;\nconst fechar = () => { if (atual.trim()) mensagens.push(atual); atual = ''; };\nconst adicionar = (trecho) => {\n  if (atual && (atual + '\\n\\n' + trecho).length > LIMITE) fechar();\n  atual = atual ? `${atual}\\n\\n${trecho}` : trecho;\n};\n\nfor (const bloco of blocos) {\n  const doBloco = jogos.filter((j) => j.bloco === bloco.nome);\n  if (!doBloco.length) continue;\n  if (mensagens.length || atual !== cabecalho) fechar();\n  adicionar(bloco.titulo);\n  let campeonatoAtual = null;\n  for (const j of doBloco) {\n    const linhas = [];\n    if (j.campeonato !== campeonatoAtual) {\n      linhas.push(`<u>${html(j.campeonato)}</u>`);\n      campeonatoAtual = j.campeonato;\n    }\n    linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);\n    if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);\n    adicionar(linhas.join('\\n'));\n  }\n}\nif (avisos.length) adicionar(avisos.join('\\n'));\nfechar();\n\nreturn mensagens.map((texto) => ({ json: { texto } }));\n"
+        "jsCode": "// Nó Code \"Montar mensagem\" (modo: Run Once for All Items)\n// Monta o resumo do dia em HTML do Telegram: uma mensagem só, separada por blocos (Brasil, Copas, Europa, NFL, NBA).\n// O Telegram aceita até 4096 caracteres por mensagem; só se passar disso o texto é dividido em mais de uma.\n\nconst LIMITE = 3900;\nconst { data, jogos, llmFalhou, totalAnalisados } = $('Selecionar jogos').first().json;\nconst { espnFalhou, nflFalhou, nbaFalhou } = $('Montar jogos do dia').first().json;\n\nconst html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');\nconst dia = DateTime.fromISO(data).setLocale('pt-BR').toFormat(\"cccc, dd/MM\");\n\nconst blocos = [\n  { nome: 'Brasil', titulo: '🇧🇷 <b>BRASIL</b>' },\n  { nome: 'Copas', titulo: '🏆 <b>COPAS</b>' },\n  { nome: 'Europa', titulo: '🌍 <b>EUROPA</b>' },\n  { nome: 'NFL', titulo: '🏈 <b>NFL</b>' },\n  { nome: 'NBA', titulo: '🏀 <b>NBA</b>' },\n];\n\nconst cabecalho = jogos.length\n  ? `📅 <b>Pauta de hoje: ${html(dia)}</b>\\n${jogos.length} de ${totalAnalisados} jogos selecionados · 🔥 jogão · ⭐ bom jogo`\n  : `📅 <b>Pauta de hoje: ${html(dia)}</b>\\nHoje não tem jogos dos campeonatos acompanhados.`;\n\nconst avisos = [];\nif (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculadas pelo peso dos times, sem briefing.');\nif (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');\nif (nflFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NFL podem estar faltando.');\nif (nbaFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NBA podem estar faltando.');\n\nconst mensagens = [];\nlet atual = cabecalho;\nconst fechar = () => { if (atual.trim()) mensagens.push(atual); atual = ''; };\nconst adicionar = (trecho) => {\n  if (atual && (atual + '\\n\\n' + trecho).length > LIMITE) fechar();\n  atual = atual ? `${atual}\\n\\n${trecho}` : trecho;\n};\n\nfor (const bloco of blocos) {\n  const doBloco = jogos.filter((j) => j.bloco === bloco.nome);\n  if (!doBloco.length) continue;\n  adicionar(bloco.titulo);\n  let campeonatoAtual = null;\n  for (const j of doBloco) {\n    const linhas = [];\n    // Subtítulo do campeonato, menos quando repete o nome do bloco (NFL, NBA)\n    if (j.campeonato !== campeonatoAtual) {\n      if (j.campeonato !== bloco.nome) linhas.push(`<u>${html(j.campeonato)}</u>`);\n      campeonatoAtual = j.campeonato;\n    }\n    linhas.push(`${selo(j.nota)} <b>${j.horario}</b> · ${html(j.mandante)} x ${html(j.visitante)}`);\n    if (j.briefing) linhas.push(`<i>${html(j.briefing)}</i>`);\n    adicionar(linhas.join('\\n'));\n  }\n}\nif (avisos.length) adicionar(avisos.join('\\n'));\nfechar();\n\nreturn mensagens.map((texto) => ({ json: { texto } }));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -530,6 +593,21 @@
             "node": "football-data",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "ESPN",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ESPN NFL",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ESPN NBA",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -538,7 +616,7 @@
       "main": [
         [
           {
-            "node": "ESPN",
+            "node": "Juntar fontes",
             "type": "main",
             "index": 0
           }
@@ -549,9 +627,9 @@
       "main": [
         [
           {
-            "node": "Montar jogos do dia",
+            "node": "Juntar fontes",
             "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
@@ -656,6 +734,39 @@
             "node": "Campeonatos",
             "type": "main",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "ESPN NFL": {
+      "main": [
+        [
+          {
+            "node": "Juntar fontes",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Juntar fontes": {
+      "main": [
+        [
+          {
+            "node": "Montar jogos do dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ESPN NBA": {
+      "main": [
+        [
+          {
+            "node": "Juntar fontes",
+            "type": "main",
+            "index": 3
           }
         ]
       ]
