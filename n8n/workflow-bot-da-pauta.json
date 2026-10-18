@@ -1,0 +1,321 @@
+{
+  "name": "Bot da Pauta",
+  "nodes": [
+    {
+      "id": "b1a00003-0000-4000-8000-000000000001",
+      "name": "A cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000003",
+      "name": "Ler mensagens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Nó Code \"Ler mensagens\" do workflow \"Bot da Pauta\" (modo: Run Once for All Items)\n// Faz o long polling no Telegram (getUpdates segura a conexão por até 30 s), confirma a leitura\n// e devolve um item por mensagem nova (texto ou áudio) vinda do chat autorizado (TELEGRAM_CHAT_ID).\n// As chamadas ficam aqui, e não num nó HTTP, porque o token do bot vai na URL e o nó HTTP grava\n// a URL inteira no log quando falha. Aqui o erro sai sem o token.\n\nconst token = $env.TELEGRAM_BOT_TOKEN;\nconst semToken = (e) => String(e?.message ?? e).split(token).join('***');\nconst getUpdates = (qs, timeout) =>\n  this.helpers.httpRequest({ url: `https://api.telegram.org/bot${token}/getUpdates`, qs, json: true, timeout });\n\nlet updates;\ntry {\n  updates = (await getUpdates({ timeout: 30, allowed_updates: '[\"message\"]' }, 45000)).result ?? [];\n} catch (e) {\n  throw new Error(`Falha ao ler mensagens do Telegram: ${semToken(e)}`);\n}\nif (updates.length === 0) return [];\n\n// Chamar getUpdates com offset = último id + 1 faz o Telegram esquecer as mensagens já lidas.\n// Confirmar antes de responder evita resposta repetida se a próxima execução começar antes desta acabar.\n// Se a confirmação falhar, nada é respondido agora: a próxima execução lê as mesmas mensagens.\ntry {\n  await getUpdates({ offset: updates[updates.length - 1].update_id + 1, timeout: 0, limit: 1 }, 15000);\n} catch (e) {\n  throw new Error(`Falha ao confirmar a leitura no Telegram: ${semToken(e)}`);\n}\n\nconst chatAutorizado = String($env.TELEGRAM_CHAT_ID);\nconst agora = Math.floor(Date.now() / 1000);\n\nreturn updates\n  .map((u) => u.message)\n  .filter((m) => m && String(m.chat.id) === chatAutorizado)\n  .filter((m) => agora - m.date < 10 * 60) // ignora mensagem com mais de 10 min (ex.: enviada com o n8n desligado)\n  .map((m) => {\n    const audio = m.voice ?? m.audio; // voice = gravado no microfone; audio = arquivo de áudio enviado\n    return {\n      chatId: m.chat.id,\n      // Em grupo, o Telegram só entrega ao bot comandos e menções: tira o \"@nome_do_bot\" e a barra do comando\n      texto: (m.text ?? m.caption ?? '').replace(/@\\w+bot\\b/gi, '').replace(/^\\/\\w+\\s*/, '').trim(),\n      audio: audio ? { fileId: audio.file_id, mime: audio.mime_type ?? 'audio/ogg', duracao: audio.duration ?? 0 } : undefined,\n      nome: m.from?.first_name ?? '',\n    };\n  })\n  .filter((m) => m.texto || m.audio) // figurinha, foto sem legenda etc. ficam de fora\n  .map((m) => ({ json: m }));\n"
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000012",
+      "name": "Transcrever áudios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Nó Code \"Transcrever áudios\" do workflow \"Bot da Pauta\" (modo: Run Once for All Items)\n// Para cada mensagem de voz: baixa o arquivo no Telegram (getFile devolve o caminho, depois baixa o .ogg)\n// e pede ao Gemini a transcrição. O texto transcrito vira a pergunta do AI Agent, que continua só com texto.\n// Mensagem de texto passa direto. Os erros saem sem o token do bot e sem a chave do Gemini.\n\nconst token = $env.TELEGRAM_BOT_TOKEN;\nconst chave = $env.GEMINI_API_KEY;\nconst semSegredos = (e) => String(e?.message ?? e).split(token).join('***').split(chave).join('***');\nconst esperar = (ms) => new Promise((r) => setTimeout(r, ms));\nconst DURACAO_MAXIMA = 180; // segundos\n\nconst transcrever = async (audio) => {\n  const arquivo = await this.helpers.httpRequest({\n    url: `https://api.telegram.org/bot${token}/getFile`,\n    qs: { file_id: audio.fileId },\n    json: true,\n  });\n  const bruto = await this.helpers.httpRequest({\n    url: `https://api.telegram.org/file/bot${token}/${arquivo.result.file_path}`,\n    encoding: 'arraybuffer',\n  });\n  const buffer = Buffer.isBuffer(bruto) ? bruto : bruto?.type === 'Buffer' ? Buffer.from(bruto.data) : Buffer.from(bruto);\n\n  const pedido = {\n    method: 'POST',\n    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent',\n    headers: { 'x-goog-api-key': chave },\n    json: true,\n    timeout: 30000,\n    body: {\n      contents: [{\n        role: 'user',\n        parts: [\n          { text: 'Transcreva este áudio em português do Brasil, exatamente o que foi dito, sem comentários nem aspas. Se não houver fala, responda apenas: (sem fala)' },\n          { inline_data: { mime_type: audio.mime, data: buffer.toString('base64') } },\n        ],\n      }],\n      generationConfig: { temperature: 0 },\n    },\n  };\n\n  // O Gemini grátis às vezes devolve 503 (alta demanda): mais uma tentativa depois de 3 s\n  let resposta;\n  try {\n    resposta = await this.helpers.httpRequest(pedido);\n  } catch (e) {\n    await esperar(3000);\n    resposta = await this.helpers.httpRequest(pedido);\n  }\n  const texto = (resposta.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('').trim();\n  if (!texto || texto === '(sem fala)') throw new Error('o áudio veio sem fala reconhecível');\n  return texto;\n};\n\nconst saida = [];\nfor (const [i, item] of $input.all().entries()) {\n  const m = item.json;\n  if (!m.audio) {\n    saida.push({ json: { ...m, transcricao: '' }, pairedItem: i });\n    continue;\n  }\n  if (m.audio.duracao > DURACAO_MAXIMA) {\n    saida.push({ json: { ...m, transcricao: '', texto: `Mandei um áudio de ${m.audio.duracao} s, acima do limite de ${DURACAO_MAXIMA} s. Avise que só entende áudio de até 3 minutos.` }, pairedItem: i });\n    continue;\n  }\n  try {\n    const transcricao = await transcrever(m.audio);\n    // Se o áudio veio com legenda, a legenda vai junto\n    saida.push({ json: { ...m, transcricao, texto: [m.texto, transcricao].filter(Boolean).join('\\n') }, pairedItem: i });\n  } catch (e) {\n    saida.push({\n      json: { ...m, transcricao: '', texto: 'Mandei um áudio, mas ele não pôde ser transcrito. Peça para eu escrever a pergunta.', erroAudio: semSegredos(e) },\n      pairedItem: i,\n    });\n  }\n}\nreturn saida;\n"
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000006",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.texto }}",
+        "options": {
+          "maxIterations": 6,
+          "systemMessage": "=Você é o assistente da pauta esportiva de uma equipe de produção brasileira e conversa pelo Telegram.\nAgora é {{ $now.setZone('America/Sao_Paulo').setLocale('pt-BR').toFormat(\"cccc, dd/MM/yyyy 'às' HH:mm\") }} em Brasília (data de hoje: {{ $now.setZone('America/Sao_Paulo').toISODate() }}).\n\nFerramentas:\n- pauta_do_dia: os jogos que o fluxo das 7h escolheu para a pauta de um dia, com nota (1 a 5), motivo, briefing, desfalques e transmissão no Brasil. Use para \"qual o jogão\", \"o que tem hoje\", \"onde passa\", \"quem está fora\".\n- placar_espn: os jogos de uma liga num dia, direto da ESPN, com situação (agendado, ao vivo, encerrado), placar e campanhas. Use para placar, resultado, jogo ao vivo, outros dias e jogos que não entraram na pauta. Para saber de um time sem liga dita, escolha a liga mais provável (time brasileiro: bra.1; se não achar, conmebol.libertadores).\n\nRegras:\n- Sempre chame uma ferramenta antes de responder qualquer pergunta sobre jogos: nunca responda de memória.\n- Pergunta vaga (\"onde vai passar?\", \"quem está fora?\", \"tem jogo bom?\") sem dizer o jogo: chame pauta_do_dia de hoje e responda sobre os jogos da pauta. Se a conversa anterior já citou um jogo, é desse que se trata.\n- A pauta de um dia vai das 6h desse dia às 6h do dia seguinte: um jogo da NBA às 0h30 de sábado está na pauta de sexta.\n- Converta \"hoje\", \"amanhã\", \"ontem\", \"domingo\" etc. em data AAAA-MM-DD a partir da data de hoje antes de chamar a ferramenta.\n- Use só o que as ferramentas devolverem. Não invente placar, canal, escalação nem desfalque. Se a informação não veio, diga que não tem.\n- Transmissão no Brasil só existe na pauta_do_dia. Se o jogo não está na pauta, diga que não sabe onde passa.\n- Responda em português do Brasil, curto (até 8 linhas), em texto puro, sem Markdown e sem asteriscos. Pode usar os emojis da pauta: 🔥 nota 5, ⭐ nota 4, 📺 transmissão, 🚑 desfalque.\n- Se a pergunta não for sobre esporte nem sobre a pauta, diga em uma frase que você só cuida da pauta de jogos.\n"
+        }
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000007",
+      "name": "Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        528,
+        240
+      ],
+      "parameters": {
+        "modelName": "models/gemini-flash-lite-latest",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "",
+          "name": "Gemini"
+        }
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000008",
+      "name": "Memória da conversa",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        672,
+        240
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Transcrever áudios').item.json.chatId }}",
+        "contextWindowLength": 6
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000009",
+      "name": "pauta_do_dia",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        816,
+        240
+      ],
+      "parameters": {
+        "description": "Jogos que o fluxo das 7h selecionou para a pauta de um dia, com nota de 1 a 5, motivo da nota, briefing, desfalques e canais de transmissão no Brasil. Use para: qual o jogão, o que tem na pauta, onde passa, quem está fora.",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Bot - pauta do dia"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "data": "={{ $fromAI('data', 'Dia da pauta no formato AAAA-MM-DD', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000010",
+      "name": "placar_espn",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        240
+      ],
+      "parameters": {
+        "description": "Jogos de um dia direto da ESPN: horário de Brasília, situação (agendado, ao vivo, encerrado), placar, campanhas e estádio. Serve para qualquer jogo da liga, inclusive os que não entraram na pauta e os de outros dias. Ligas: nfl, nba, bra.1 (Brasileirão), conmebol.libertadores, uefa.champions, uefa.europa, eng.1 (Premier League), esp.1 (La Liga), ita.1 (Serie A), ger.1 (Bundesliga), fra.1 (Ligue 1). Uma liga por chamada.",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Bot - placar ESPN"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "liga": "={{ $fromAI('liga', 'Código da liga: nfl, nba, bra.1, conmebol.libertadores, uefa.champions, uefa.europa, eng.1, esp.1, ita.1, ger.1 ou fra.1', 'string') }}",
+            "data": "={{ $fromAI('data', 'Dia dos jogos no formato AAAA-MM-DD', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "liga",
+              "displayName": "liga",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      }
+    },
+    {
+      "id": "b1a00003-0000-4000-8000-000000000011",
+      "name": "Responder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        0
+      ],
+      "parameters": {
+        "chatId": "={{ $('Transcrever áudios').item.json.chatId }}",
+        "text": "={{ (($('Transcrever áudios').item.json.transcricao ? '🎤 \"' + $('Transcrever áudios').item.json.transcricao + '\"\\n\\n' : '') + ($json.output || 'Não consegui responder agora (o Gemini falhou). Tente de novo em um minuto.')).slice(0, 4000) }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram - Resumo de Jogos"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "A cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Ler mensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler mensagens": {
+      "main": [
+        [
+          {
+            "node": "Transcrever áudios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcrever áudios": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória da conversa": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "pauta_do_dia": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "placar_espn": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false
+}

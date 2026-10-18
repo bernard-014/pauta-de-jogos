@@ -50,6 +50,14 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
   - Risco: API não oficial, pode mudar sem aviso. Se falhar, a pauta sai sem a linha 📺.
   - NBA na pré-temporada veio sem transmissão; NFL e futebol vieram com canais.
 
+## Bot que responde perguntas
+- [x] AI Agent no Telegram (workflow **Bot da Pauta**) com ferramentas `pauta_do_dia` (Airtable) e `placar_espn` (ESPN), memória da conversa e long polling. Feito em 17/10/2026.
+- [x] Perguntas por áudio, transcritas pelo Gemini antes de chegar ao agente.
+- [ ] Modelo de reserva no AI Agent (opção *fallback model*) para quando o Gemini der 503. Candidato: Nemotron via OpenRouter, cuja chave está sendo adicionada em outra sessão.
+- [ ] Memória que sobrevive ao reinício do n8n (hoje é a Simple Memory, que fica na RAM).
+- [ ] Ferramenta de desfalques ao vivo (ESPN `injuries`) para jogos fora da pauta.
+- [ ] Avaliação do agente: um conjunto fixo de perguntas com resposta esperada, rodado depois de cada mudança de prompt (n8n Evaluations).
+
 ## Outras ideias
 - [ ] Formulário do Airtable para a equipe marcar "quero cobertura deste jogo", com aviso automático no Telegram.
 - [ ] Rodar o n8n em um servidor gratuito para o gatilho das 7h não depender do PC ligado.

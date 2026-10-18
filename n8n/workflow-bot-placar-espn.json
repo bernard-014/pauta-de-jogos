@@ -1,0 +1,112 @@
+{
+  "name": "Bot - placar ESPN",
+  "nodes": [
+    {
+      "id": "b1a00002-0000-4000-8000-000000000001",
+      "name": "Quando o bot pedir",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "liga"
+            },
+            {
+              "name": "data"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b1a00002-0000-4000-8000-000000000002",
+      "name": "Montar URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Nó Code \"Montar URL\" do subfluxo \"Bot - placar ESPN\" (modo: Run Once for All Items)\n// Traduz a liga pedida pelo AI Agent para o caminho da ESPN e confere a data.\n// Liga fora da lista vira erro com as opções válidas, para o agente tentar de novo.\n\nconst ligas = {\n  nfl: 'football/nfl',\n  nba: 'basketball/nba',\n  'bra.1': 'soccer/bra.1',\n  'conmebol.libertadores': 'soccer/conmebol.libertadores',\n  'uefa.champions': 'soccer/uefa.champions',\n  'uefa.europa': 'soccer/uefa.europa',\n  'eng.1': 'soccer/eng.1',\n  'esp.1': 'soccer/esp.1',\n  'ita.1': 'soccer/ita.1',\n  'ger.1': 'soccer/ger.1',\n  'fra.1': 'soccer/fra.1',\n};\n\nconst liga = String($json.liga ?? '').toLowerCase().trim();\nconst caminho = ligas[liga];\nif (!caminho) {\n  return [{ json: { erro: `Liga desconhecida: \"${$json.liga}\". Use uma destas: ${Object.keys(ligas).join(', ')}.` } }];\n}\n\nconst dia = DateTime.fromISO(String($json.data ?? ''), { zone: 'America/Sao_Paulo' });\nif (!dia.isValid) {\n  return [{ json: { erro: `Data inválida: \"${$json.data}\". Use o formato AAAA-MM-DD.` } }];\n}\n\nreturn [{\n  json: {\n    liga,\n    url: `https://site.api.espn.com/apis/site/v2/sports/${caminho}/scoreboard?dates=${dia.toFormat('yyyyMMdd')}`,\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "b1a00002-0000-4000-8000-000000000003",
+      "name": "Placar ESPN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "b1a00002-0000-4000-8000-000000000004",
+      "name": "Resumir placar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Nó Code \"Resumir placar\" do subfluxo \"Bot - placar ESPN\" (modo: Run Once for All Items)\n// O placar da ESPN chega com centenas de KB (só a rodada da NFL passa de 200 KB).\n// Aqui ele vira uma lista curta, para não estourar o limite de tokens do Gemini.\n\nconst pedido = $('Montar URL').first().json;\nif (pedido.erro) return [{ json: { erro: pedido.erro } }];\n\nconst resposta = $('Placar ESPN').first().json;\nif (resposta.error || !Array.isArray(resposta.events)) {\n  return [{ json: { erro: 'A ESPN não respondeu agora. Avise que não deu para consultar o placar.' } }];\n}\n\nconst situacao = { pre: 'agendado', in: 'ao vivo', post: 'encerrado' };\n\nconst jogos = resposta.events.map((e) => {\n  const c = e.competitions[0];\n  const casa = c.competitors.find((t) => t.homeAway === 'home') ?? c.competitors[0];\n  const fora = c.competitors.find((t) => t.homeAway === 'away') ?? c.competitors[1];\n  const estado = c.status.type.state;\n  const campanha = (t) => t.records?.[0]?.summary;\n  return {\n    horario: DateTime.fromISO(e.date).setZone('America/Sao_Paulo').toFormat('dd/MM HH:mm'),\n    jogo: `${casa.team.displayName} x ${fora.team.displayName}`,\n    situacao: situacao[estado] ?? c.status.type.description,\n    placar: estado === 'pre' ? undefined : `${casa.score} x ${fora.score}`,\n    detalhe: estado === 'in' ? c.status.type.shortDetail : undefined, // tempo ou quarto em andamento\n    campanhas: campanha(casa) && campanha(fora) ? `${campanha(casa)} x ${campanha(fora)}` : undefined,\n    local: c.venue?.fullName,\n  };\n});\n\nreturn [{\n  json: {\n    liga: resposta.leagues?.[0]?.name ?? pedido.liga,\n    total: jogos.length,\n    jogos,\n    observacao: 'Horários de Brasília. Campanhas e placares da ESPN; a TV listada pela ESPN é a dos EUA, por isso não vem aqui.',\n  },\n}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Quando o bot pedir": {
+      "main": [
+        [
+          {
+            "node": "Montar URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar URL": {
+      "main": [
+        [
+          {
+            "node": "Placar ESPN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Placar ESPN": {
+      "main": [
+        [
+          {
+            "node": "Resumir placar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false
+}

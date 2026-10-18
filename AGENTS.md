@@ -21,8 +21,6 @@ O próximo agente pode ser outro modelo, sem acesso à sua conversa nem à sua m
 
 ## Quem é o usuário e como trabalhar com ele
 
-- **2026-10-16, Claude Code**: desfalques na mensagem agora saem um por linha (🚑 + jogador), em vez de tudo corrido; `montar-mensagem.js` divide o campo `desfalques` por `;`. Aplicado e publicado no n8n (`patchNodeField`) e no JSON do repositório. **Sem commit.** Pendente: o usuário rodar o fluxo para conferir.
-
 - **Bernard**, brasileiro. Escreva **sempre em português do Brasil**, de forma clara e direta.
 - O projeto é de **portfólio** para uma vaga que pede n8n, Airtable, LLM, fluxo agêntico e documentação (contexto: CazéTV / 365Scores). O usuário quer **entender cada etapa para explicar na entrevista**: explique o porquê das decisões, não só o que foi feito.
 - **Tudo tem que ser gratuito.** Não proponha serviço pago.
@@ -44,7 +42,7 @@ Documentação para humanos: [`README.md`](README.md) (arquitetura, decisões, c
 
 ## Estado atual (atualize sempre)
 
-_Última atualização: 2026-10-16, Claude Code (transmissão)._
+_Última atualização: 2026-10-17, Claude Code (bot com AI Agent e áudio)._
 
 | O quê | Situação |
 |---|---|
@@ -57,6 +55,7 @@ _Última atualização: 2026-10-16, Claude Code (transmissão)._
 | Janela da pauta 6h–6h | Pronto, commitado. |
 | Desfalques (lesões/suspensões) | Restaurados `ESPN NFL lesões` e `ESPN NBA lesões` (HTTP), Merge com 7 entradas e leitura das respostas completas. **Aplicado e confirmado na versão publicada do n8n** em 16/10/2026. Validação sem erros; teste local com lesões reais e jogos simulados aprovado. Falta conferir uma execução completa pelo usuário. Usuário prefere manter ~10 MB por execução. Coluna `Desfalques` já existe no Airtable; futebol ainda depende da credencial `API-Football` e de teste real. |
 | Transmissão (365Scores) | Implementada em 16/10/2026: 5 nós depois de `Selecionar jogos`, linha 📺 na mensagem e coluna `Transmissão` no Airtable (criada). **Aplicado e publicado no n8n**, validação sem erros. **Confirmado pelo usuário na execução 31** (linha 📺 apareceu). Commitado e enviado para a `main`. |
+| Bot que responde perguntas (AI Agent) | Criado em 17/10/2026: workflow `Bot da Pauta` (ativo) + subfluxos `Bot - pauta do dia` e `Bot - placar ESPN` (publicados). Texto e áudio testados de verdade (execuções 36, 38 e 49: transcrição correta, resposta com 🎤). Commitado na branch `bot-ai-agent` (sem merge e sem push). |
 | Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` sincronizada com o GitHub (confira com `git log --oneline -3`; correção dos desfalques da NBA e novo `start-n8n.ps1` já enviados). |
 
 ### Trabalho em andamento
@@ -89,6 +88,9 @@ _Última atualização: 2026-10-16, Claude Code (transmissão)._
 |---|---|---|
 | Pauta de Jogos | `Fb91kahwaHwrAQwV` | Fluxo principal, ativo. |
 | smoke-test-pauta | `smokeTestPauta01` | Testa as APIs. Inativo. |
+| Bot da Pauta | `Odzi5fJPjPehzrDK` | Bot do Telegram com AI Agent. Ativo, roda a cada minuto. |
+| Bot - pauta do dia | `cw7aVcN4GxUye4pS` | Subfluxo-ferramenta do bot (Airtable). Publicado. |
+| Bot - placar ESPN | `FYRpySMCGqCRLS1t` | Subfluxo-ferramenta do bot (ESPN). Publicado. |
 
 O n8n tem modelo rascunho/publicado. Em workflow ativo, as atualizações via `n8n_update_partial_workflow` foram publicadas na hora (confira com `n8n_get_workflow` no modo `active`).
 
@@ -124,6 +126,23 @@ O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
 | Adicionar transmissão | `n8n/code/adicionar-transmissao.js` |
 | Montar mensagem | `n8n/code/montar-mensagem.js` |
 
+### Bot da Pauta (AI Agent)
+
+`A cada minuto` (Schedule) → `Ler mensagens` (Code: long polling `getUpdates` com `timeout=30`, confirma a leitura com offset antes de responder, só aceita o chat do `TELEGRAM_CHAT_ID`, texto ou áudio) → `Transcrever áudios` (Code: `getFile` + download + Gemini `generateContent` com o áudio em base64, usa `$env.GEMINI_API_KEY`, limite de 180 s) → `AI Agent` (v3.1, retry 3×, `onError: continue`) → `Responder` (Telegram, prefixo 🎤 com a transcrição). Sub-nós do agente: `Gemini` (`lmChatGoogleGemini`, `gemini-flash-lite-latest`, credencial `Gemini` do tipo googlePalmApi), `Memória da conversa` (Simple Memory, 6 trocas, chave = chatId), `pauta_do_dia` e `placar_espn` (toolWorkflow 2.2 → subfluxos acima). Prompt do agente em `n8n/code/bot-instrucoes-agente.txt`.
+
+- As chamadas ao Telegram e ao Gemini do bot ficam em nós Code com `this.helpers.httpRequest` (o task runner do n8n 2.x expõe esse helper) **de propósito**: o nó HTTP grava a URL inteira no log de erro, e no Telegram o token vai na URL. Os Code tratam o erro e tiram token e chave da mensagem. Não volte para nó HTTP.
+- Subfluxos chamados por ferramenta precisam estar **publicados** (o n8n 2.x usa a versão publicada).
+- Exportações do repositório: `n8n/workflow-bot-*.json`, geradas a partir de `n8n/code/bot-*.js` (o `workflowId` das ferramentas fica vazio no repositório).
+
+| Nó | Arquivo |
+|---|---|
+| Ler mensagens | `n8n/code/bot-ler-mensagens.js` |
+| Transcrever áudios | `n8n/code/bot-transcrever-audios.js` |
+| AI Agent (system message) | `n8n/code/bot-instrucoes-agente.txt` |
+| Resumir pauta (subfluxo) | `n8n/code/bot-resumir-pauta.js` |
+| Montar URL (subfluxo) | `n8n/code/bot-montar-url-espn.js` |
+| Resumir placar (subfluxo) | `n8n/code/bot-resumir-placar.js` |
+
 Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$('ESPN NBA')`...). **Renomear um nó quebra o código.**
 
 ### Credenciais no n8n (nomes)
@@ -132,7 +151,8 @@ Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$
 - `football-data.org` (Header Auth `X-Auth-Token`)
 - `Gemini (header)` (Header Auth `x-goog-api-key`)
 - `Telegram - Resumo de Jogos` (Telegram API)
-- `API-Football` (Header Auth `x-apisports-key`): **o usuário ainda precisa criar** e selecionar no nó `API-Football lesões`. Sem ela o nó falha, o fluxo segue e a mensagem avisa.
+- `API-Football` (Header Auth `x-apisports-key`): já existe no n8n (vista em 17/10/2026). Falta confirmar se está selecionada no nó `API-Football lesões` e se o plano grátis cobre a temporada.
+- `Gemini` (googlePalmApi): usada pelo sub-nó `Gemini` do bot.
 
 Para obter os IDs, leia um nó que usa a credencial (`n8n_get_workflow`, modo `filtered`).
 
@@ -228,6 +248,9 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 ## Registro de mudanças
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
+
+- **2026-10-17, Claude Code**: bot do Telegram que responde perguntas com AI Agent (workflow `Bot da Pauta` + subfluxos `Bot - pauta do dia` e `Bot - placar ESPN`), escolhas do usuário: polling (sem túnel) e ferramentas Airtable + ESPN ao vivo. Depois, perguntas por áudio (transcrição pelo Gemini). Código em `n8n/code/bot-*.js`, exportações em `n8n/workflow-bot-*.json`, README/MANUAL/ROADMAP atualizados. Testes locais com ESPN real e mocks de Telegram/Gemini; conversa real por texto OK (execuções 36 e 38); prompt corrigido para sempre chamar ferramenta (a 1ª resposta a "onde vai passar" veio sem consultar nada). Achado: a execução 40 (versão antiga, nó HTTP) gravou no log de erro a URL do Telegram **com o token do bot**; corrigido movendo as chamadas para nós Code. Áudio real confirmado na execução 49. Commitado na branch `bot-ai-agent`, sem merge e sem push. **Pendente**: apagar a execução 40 (pedir ao usuário); juntar na `main`; modelo de reserva (Nemotron via OpenRouter, chave sendo criada em outra sessão). Também movida para cá uma entrada de 16/10 (desfalques um por linha, commit `0f84392`) que estava fora do lugar.
+- **2026-10-16, Claude Code**: desfalques na mensagem agora saem um por linha (🚑 + jogador), em vez de tudo corrido; `montar-mensagem.js` divide o campo `desfalques` por `;`. Aplicado e publicado no n8n e no JSON do repositório. Commitado em `0f84392`.
 
 - **2026-10-16, Claude Code**: transmissão dos jogos via API pública do site da 365Scores. 3 arquivos novos em `n8n/code/` (pedidos, casar, adicionar), `montar-mensagem.js` (linha 📺 + aviso) e `separar-jogos-airtable.js` (coluna `Transmissão`) agora leem `Adicionar transmissão`. Coluna `Transmissão` criada no Airtable pela API de metadados (workflow temporário, já apagado). Teste local: pauta real de 16/10 (execução 29) e 30 jogos de 18/10 (NFL, PL, La Liga, Serie A, Bundesliga, Brasileirão), 100% casados; queda da 365Scores e dia sem jogos testados. Aplicado e publicado no n8n (20 operações parciais), validação sem erros. JSON do repositório, README, MANUAL e ROADMAP atualizados. Usuário rodou o fluxo (execução 31, sucesso) e confirmou a linha 📺. Commitado na `main` com push.
 

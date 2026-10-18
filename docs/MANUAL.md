@@ -18,6 +18,15 @@ Quando há desfalque que importa, vem uma linha 🚑 com até 3 nomes, por exemp
 
 Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando. Os avisos *"não mandou as lesões"* e *"API-Football falhou"* querem dizer que a pauta saiu normal, só sem a linha de desfalques daquele esporte. O aviso *"A 365Scores não respondeu"* quer dizer que a pauta saiu sem a linha 📺.
 
+## Perguntar ao bot
+
+No mesmo chat do Telegram dá para perguntar a qualquer hora, digitando ou mandando **áudio** (até 3 minutos):
+
+- *"Qual o jogão de hoje?"*, *"Onde passa o jogo do Flamengo?"*, *"Quem está fora do Lakers?"*: o bot responde com a pauta gravada no Airtable.
+- *"Quanto está o jogo dos Chiefs?"*, *"Quem ganhou ontem na Premier League?"*, *"Tem NFL amanhã?"*: o bot consulta o placar da ESPN na hora.
+
+A resposta pode levar até um minuto para chegar. Quando a pergunta é por áudio, a resposta começa com 🎤 e o que o bot entendeu. Se ele entendeu errado, escreva a pergunta. Canal de transmissão só existe para os jogos da pauta. Para os outros jogos, o bot avisa que não sabe onde passa. O bot só responde neste chat e só funciona com o n8n ligado.
+
 ## Onde ver todos os jogos
 
 Na base **Pauta de Jogos** do Airtable, tabela **Jogos**, view **Jogos do Dia**. Lá ficam todos os jogos selecionados, com:

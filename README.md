@@ -92,6 +92,38 @@ O código de todos os nós Code está em [`n8n/code/`](n8n/code), comentado.
 
 ---
 
+## Bot que responde perguntas (AI Agent)
+
+Além da pauta das 7h, o mesmo bot do Telegram responde perguntas a qualquer hora, por texto ou **áudio**: "qual o jogão de hoje?", "onde passa o jogo do Flamengo?", "quanto está o jogo dos Chiefs?". Quem responde é um **AI Agent** do n8n, que decide sozinho qual ferramenta consultar.
+
+```mermaid
+flowchart LR
+    S["⏰ A cada minuto"] --> L["Ler mensagens<br/>(long polling no Telegram)"]
+    L --> TA["Transcrever áudios<br/>(Gemini)"]
+    TA --> A{{"🤖 AI Agent"}}
+    G["Gemini<br/>(modelo)"] -.-> A
+    M["Memória da conversa"] -.-> A
+    P["pauta_do_dia<br/>subfluxo → Airtable"] -.-> A
+    E["placar_espn<br/>subfluxo → ESPN"] -.-> A
+    A --> R["📱 Responder"]
+```
+
+| Peça | O que faz |
+|---|---|
+| **Ler mensagens** (Code) | Chama o `getUpdates` do Telegram com `timeout=30`. O Telegram segura a conexão até chegar mensagem (*long polling*), então a resposta sai em segundos mesmo com o gatilho a cada minuto. Confirma a leitura (offset = último id + 1) **antes** de responder, para uma execução sobreposta não responder a mesma mensagem duas vezes. Só aceita o chat do `TELEGRAM_CHAT_ID`. |
+| **Transcrever áudios** (Code) | Mensagem de voz: `getFile` → baixa o `.ogg` → manda ao Gemini em base64 pedindo a transcrição. O texto vira a pergunta do agente, que continua trabalhando só com texto. A resposta mostra o que foi entendido (🎤). Limite de 3 minutos por áudio. |
+| **AI Agent** + **Gemini** | Recebe a pergunta, a data de hoje e as regras (não inventar placar, canal ou desfalque; texto curto, sem Markdown). Tenta 3 vezes se o Gemini falhar e, no fim, avisa em vez de ficar mudo. |
+| **Memória da conversa** | Guarda as últimas 6 trocas do chat, para "e o do Flamengo?" funcionar depois de outra pergunta. Fica na memória do n8n e zera quando ele reinicia. |
+| **pauta_do_dia** (subfluxo `Bot - pauta do dia`) | Busca na tabela Jogos os jogos da pauta de um dia e troca o id do link pelo nome do campeonato. Tem nota, briefing, desfalques e transmissão. |
+| **placar_espn** (subfluxo `Bot - placar ESPN`) | Placar, situação e campanhas de uma liga num dia, direto da ESPN (11 ligas). Reduz a resposta da ESPN (216 KB numa rodada da NFL) para ~2 KB antes de chegar ao modelo. |
+
+Por que essas escolhas:
+- **Polling e não webhook:** o n8n roda no PC, sem endereço público. Webhook exigiria um túnel com URL que muda a cada reinício. O long polling funciona em localhost e é quase tão rápido.
+- **Ferramentas como subfluxos:** cada ferramenta pode limpar e encolher os dados antes de o LLM ver. Menos tokens, menos alucinação e a cota grátis rende mais.
+- **Chamadas ao Telegram dentro de nó Code:** o token do bot vai na URL. Quando um nó HTTP falha, o n8n grava a URL inteira no log de erro. No nó Code o erro é tratado e sai sem o token (e sem a chave do Gemini).
+
+---
+
 ## Regras de seleção
 
 | Campeonato | O que entra |
@@ -132,6 +164,9 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
 ├── n8n/
 │   ├── workflow-pauta-de-jogos.json   # fluxo principal (importar no n8n)
 │   ├── workflow-smoke-test.json       # testa as 4 APIs de uma vez
+│   ├── workflow-bot-da-pauta.json     # bot que responde perguntas (AI Agent)
+│   ├── workflow-bot-pauta-do-dia.json # ferramenta do bot: pauta no Airtable
+│   ├── workflow-bot-placar-espn.json  # ferramenta do bot: placar da ESPN
 │   └── code/                          # código de cada nó Code, comentado
 ├── airtable/
 │   ├── campeonatos.csv                # configuração dos campeonatos
@@ -160,6 +195,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
    - *Header Auth* `x-apisports-key` para a API-Football (nome da credencial: `API-Football`)
    - *Telegram API* com o token do bot
 5. Rode o `workflow-smoke-test.json` para conferir as quatro APIs, execute o fluxo principal manualmente uma vez e depois ative-o.
+6. **Bot (opcional):** importe primeiro os dois subfluxos (`workflow-bot-pauta-do-dia.json` e `workflow-bot-placar-espn.json`) e publique-os. Depois importe `workflow-bot-da-pauta.json`, escolha os subfluxos nos nós `pauta_do_dia` e `placar_espn`, crie uma credencial *Google Gemini (PaLM) API* (nome `Gemini`) e ative. O bot usa `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` e `GEMINI_API_KEY` do `.env`.
 
 > O n8n roda local, então o gatilho das 7h só dispara com o PC ligado. Para produção, o mesmo fluxo roda em um servidor ou no n8n Cloud sem alterações.
 

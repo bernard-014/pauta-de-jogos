@@ -1,0 +1,142 @@
+{
+  "name": "Bot - pauta do dia",
+  "nodes": [
+    {
+      "id": "b1a00001-0000-4000-8000-000000000001",
+      "name": "Quando o bot pedir",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "data"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b1a00001-0000-4000-8000-000000000002",
+      "name": "Buscar jogos",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        0
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Jogos"
+        },
+        "filterByFormula": "=DATETIME_FORMAT({Data}, 'YYYY-MM-DD') = '{{ $json.data }}'",
+        "options": {}
+      },
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "id": "b1a00001-0000-4000-8000-000000000003",
+      "name": "Campeonatos",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        0
+      ],
+      "executeOnce": true,
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Campeonatos"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "id": "b1a00001-0000-4000-8000-000000000004",
+      "name": "Resumir pauta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Nó Code \"Resumir pauta\" do subfluxo \"Bot - pauta do dia\" (modo: Run Once for All Items)\n// Junta os jogos gravados na tabela Jogos com o nome do campeonato (o campo Campeonato é um link,\n// que chega só com o id do registro) e devolve uma lista enxuta para o AI Agent.\n\nconst campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });\nconst data = $('Quando o bot pedir').first().json.data;\n\nconst nomeDoCampeonato = new Map($('Campeonatos').all().map(campos).map((c) => [c.id, c.Nome]));\n\nconst jogos = $('Buscar jogos').all()\n  .map(campos)\n  .filter((j) => j.ID) // sem jogo, o Airtable devolve um item vazio\n  .sort((a, b) => String(a['Horário']).localeCompare(String(b['Horário'])))\n  .map((j) => ({\n    horario: j['Horário'] ? DateTime.fromISO(j['Horário']).setZone('America/Sao_Paulo').toFormat('dd/MM HH:mm') : undefined,\n    campeonato: (j.Campeonato ?? []).map((id) => nomeDoCampeonato.get(id) ?? id).join(', '),\n    jogo: `${j.Mandante} x ${j.Visitante}`,\n    nota: j.Nota,\n    porQueANota: j['Por que a nota'],\n    briefing: j.Briefing || undefined,\n    desfalques: j.Desfalques || undefined,\n    transmissao: j['Transmissão'] || undefined,\n    status: j.Status,\n  }));\n\nreturn [{\n  json: {\n    data,\n    total: jogos.length,\n    jogos,\n    observacao: jogos.length\n      ? 'Só os jogos selecionados para a pauta. Status e nota são do momento da coleta (7h).'\n      : 'Nenhum jogo gravado na pauta deste dia (a pauta só existe a partir das 7h do próprio dia).',\n  },\n}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Quando o bot pedir": {
+      "main": [
+        [
+          {
+            "node": "Buscar jogos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar jogos": {
+      "main": [
+        [
+          {
+            "node": "Campeonatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campeonatos": {
+      "main": [
+        [
+          {
+            "node": "Resumir pauta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false
+}
