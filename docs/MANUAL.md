@@ -16,7 +16,7 @@ Quando a 365Scores lista onde o jogo passa, vem uma linha 📺 com os canais no 
 
 Quando há desfalque que importa, vem uma linha 🚑 com até 3 nomes, por exemplo *🚑 Jalen Hurts (Eagles, fora); Baker Mayfield (Buccaneers, dúvida)*. A lista de lesionados e suspensos vem das fontes (ESPN para NFL e NBA, API-Football para futebol). O LLM só escolhe quais importam, e qualquer nome que não esteja na lista da fonte é descartado antes de ir para a mensagem. Mesmo assim, a situação do jogador pode mudar até a hora do jogo.
 
-Se aparecer o aviso ⚠️ *"O Gemini não respondeu hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando. Os avisos *"não mandou as lesões"* e *"API-Football falhou"* querem dizer que a pauta saiu normal, só sem a linha de desfalques daquele esporte. O aviso *"A 365Scores não respondeu"* quer dizer que a pauta saiu sem a linha 📺.
+Se aparecer o aviso ℹ️ *"O Gemini não respondeu hoje: notas e briefings feitos pelo modelo reserva"*, a pauta está completa, só que avaliada pelo Nemotron (NVIDIA, grátis pelo OpenRouter) em vez do Gemini. Se aparecer ⚠️ *"Nem o Gemini nem o Nemotron (reserva) responderam hoje"*, as notas foram calculadas só pelo peso dos times e não há briefing. Se aparecer ⚠️ *"A ESPN não respondeu"*, a Europa League (ou a NFL ou a NBA, conforme o aviso) pode estar faltando. Os avisos *"não mandou as lesões"* e *"API-Football falhou"* querem dizer que a pauta saiu normal, só sem a linha de desfalques daquele esporte. O aviso *"A 365Scores não respondeu"* quer dizer que a pauta saiu sem a linha 📺.
 
 ## Perguntar ao bot
 

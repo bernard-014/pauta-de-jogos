@@ -38,6 +38,11 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 - [x] Lesionados e suspensos de cada time: ESPN para NFL e NBA, API-Football para futebol. O Gemini escolhe até 3 que importam, e eles aparecem na linha 🚑 e na coluna *Desfalques* do Airtable.
 - [ ] Conferir com a chave real se o plano grátis da API-Football cobre a temporada atual de todas as ligas da pauta (o endpoint `/leagues` traz `coverage.injuries`).
 
+## Modelo de reserva (LLM)
+- [x] Nemotron via OpenRouter quando o Gemini falha na pauta (nós **Gemini respondeu?** e **Nemotron (reserva)**, 17/10/2026). Fila grátis: Super 120B → Ultra 550B → 3.5 Super VL, raciocínio desligado. Testado direto na API e localmente nos três cenários (Gemini OK, só reserva, os dois falhando).
+- [ ] Conferir numa execução real em que o Gemini falhe (dá para simular trocando o modelo do nó Gemini por um nome inválido e rodando à mão).
+- [ ] Se o Gemini continuar instável, avaliar inverter a ordem (Nemotron primeiro).
+
 ## Transmissão (onde passa o jogo)
 - [x] Mostrar os canais brasileiros de cada jogo selecionado (linha 📺 na mensagem e coluna *Transmissão* no Airtable). Feito em 16/10/2026: nós **Pedidos 365Scores**, **365Scores jogos**, **Casar transmissões**, **365Scores transmissão** e **Adicionar transmissão**.
 - [x] Conferido na execução real 31 do n8n (testado localmente com a pauta de 16/10 e com 30 jogos de domingo, 18/10: todos casaram).
@@ -53,7 +58,7 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 ## Bot que responde perguntas
 - [x] AI Agent no Telegram (workflow **Bot da Pauta**) com ferramentas `pauta_do_dia` (Airtable) e `placar_espn` (ESPN), memória da conversa e long polling. Feito em 17/10/2026.
 - [x] Perguntas por áudio, transcritas pelo Gemini antes de chegar ao agente.
-- [ ] Modelo de reserva no AI Agent (opção *fallback model*) para quando o Gemini der 503. Candidato: Nemotron via OpenRouter, cuja chave está sendo adicionada em outra sessão.
+- [ ] Modelo de reserva no AI Agent (opção *fallback model*) para quando o Gemini der 503. Candidato: Nemotron via OpenRouter; a chave já está no `.env` e a fila testada na pauta (Super 120B → Ultra → 3.5 Super VL) pode ser reaproveitada.
 - [ ] Memória que sobrevive ao reinício do n8n (hoje é a Simple Memory, que fica na RAM).
 - [ ] Ferramenta de desfalques ao vivo (ESPN `injuries`) para jogos fora da pauta.
 - [ ] Avaliação do agente: um conjunto fixo de perguntas com resposta esperada, rodado depois de cada mudança de prompt (n8n Evaluations).

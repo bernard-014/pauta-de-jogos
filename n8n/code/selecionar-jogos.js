@@ -1,20 +1,37 @@
 // Nó Code "Selecionar jogos" (modo: Run Once for All Items)
-// Lê as notas do Gemini e aplica as regras do resumo:
+// Lê as notas do Gemini (ou, se ele falhou, do Nemotron via OpenRouter) e aplica as regras do resumo:
 // - campeonatos com "Todos os jogos" marcado: entram todos;
 // - nos outros: nota 5 entra sempre, nota 4 entra até o "Limite nota 4" do campeonato.
-// Se o Gemini falhar, a nota sai do peso dos times e o resumo é enviado mesmo assim (sem briefing nem desfalques).
+// Se os dois falharem, a nota sai do peso dos times e o resumo é enviado mesmo assim (sem briefing nem desfalques).
 
 const { data, jogos } = $('Montar jogos do dia').first().json;
 
+// O nó "Nemotron (reserva)" só roda quando o Gemini não respondeu; se ele não rodou, $('Nemotron (reserva)') dá erro.
+const lerGemini = () => {
+  const resposta = $('Gemini').first().json;
+  return JSON.parse(resposta.candidates[0].content.parts.map((p) => p.text ?? '').join('')).jogos;
+};
+const lerReserva = () => {
+  const resposta = $('Nemotron (reserva)').first().json;
+  const texto = resposta.choices[0].message.content.replace(/^\s*```(json)?|```\s*$/g, '');
+  return { jogos: JSON.parse(texto).jogos, modelo: resposta.model };
+};
+
 let avaliacoes = [];
 let llmFalhou = false;
+let llmReserva = '';
 try {
-  const resposta = $('Gemini').first().json;
-  const texto = resposta.candidates[0].content.parts.map((p) => p.text ?? '').join('');
-  avaliacoes = JSON.parse(texto).jogos;
+  avaliacoes = lerGemini();
 } catch (e) {
-  llmFalhou = jogos.length > 0;
+  try {
+    const reserva = lerReserva();
+    avaliacoes = reserva.jogos;
+    llmReserva = reserva.modelo;
+  } catch (e2) {
+    llmFalhou = jogos.length > 0;
+  }
 }
+if (!Array.isArray(avaliacoes)) avaliacoes = [];
 const porId = new Map(avaliacoes.map((a) => [a.id, a]));
 
 const notaPeloPeso = (j) => {
@@ -72,6 +89,7 @@ return [{
   json: {
     data,
     llmFalhou,
+    llmReserva,
     totalAnalisados: jogos.length,
     totalEscolhidos: escolhidos.length,
     jogos: escolhidos,

@@ -4,7 +4,7 @@ Fluxo agêntico no **n8n** que, todo dia às 7h, levanta os jogos de futebol, da
 
 Feito para resolver uma dor real de quem trabalha com esporte: toda manhã alguém da produção precisa descobrir quais jogos acontecem, quais importam para o público brasileiro e o que dizer sobre cada um. Aqui isso chega pronto no celular antes do expediente.
 
-**Custo: R$ 0.** Tudo roda em planos gratuitos (n8n self-hosted, Airtable Free, Gemini free tier, football-data.org free, API-Football free, ESPN pública, 365Scores pública, Telegram).
+**Custo: R$ 0.** Tudo roda em planos gratuitos (n8n self-hosted, Airtable Free, Gemini free tier, OpenRouter (modelos Nemotron :free), football-data.org free, API-Football free, ESPN pública, 365Scores pública, Telegram).
 
 > 🎥 **Vídeo de demonstração (2 min):** _em breve_
 
@@ -68,7 +68,10 @@ flowchart LR
     LC --> CL["football-data.org<br/>tabela de classificação"]
     CL --> PG["Preparar pedido ao Gemini"]
     PG --> G["🤖 Gemini<br/>nota 1–5 + briefing<br/>(JSON estruturado)"]
-    G --> SJ["Selecionar jogos<br/>(regras de corte)"]
+    G --> GR{"Gemini<br/>respondeu?"}
+    GR -->|sim| SJ["Selecionar jogos<br/>(regras de corte)"]
+    GR -->|não| NR["🛟 Nemotron via OpenRouter<br/>(reserva grátis)"]
+    NR --> SJ
     SJ --> TV["365Scores<br/>onde passa (canais no Brasil)"]
     TV --> SA["Separar jogos"] --> AT[("Airtable<br/>Jogos (upsert)")]
     TV --> MM["Montar mensagem<br/>(HTML, ≤ 4096 caracteres)"] --> TG["📲 Telegram"]
@@ -83,7 +86,8 @@ flowchart LR
 | 4 | **Montar jogos do dia** (Code) | Junta as quatro fontes num formato único, converte UTC para o horário de Brasília, mantém só os jogos da pauta (de hoje às 6h até amanhã às 6h, para não perder jogo da NBA que começa depois da meia-noite) e casa os nomes dos times com a tabela Times. Depois pendura em cada jogo os desfalques dos dois times: NFL e NBA pelo id do time na ESPN, futebol pelo horário de início e pelo nome do time (a API-Football usa ids próprios). |
 | 5 | **Ligas com classificação** + **Classificação** | Para cada liga com jogo hoje (e que tenha tabela), busca a classificação, que vira contexto para o LLM. |
 | 6 | **Preparar pedido ao Gemini** + **Gemini** | Monta o prompt com critérios explícitos de nota e pede a resposta em JSON com `responseSchema` fixo. |
-| 7 | **Selecionar jogos** (Code) | Aplica as regras de corte (abaixo). Se o Gemini falhar, calcula a nota pelo peso dos times e o resumo sai mesmo assim. |
+| 6b | **Gemini respondeu?** (IF) + **Nemotron (reserva)** (HTTP) | Se o Gemini não devolveu texto (503 de alta demanda, cota estourada), o mesmo prompt vai ao OpenRouter, numa fila de modelos Nemotron grátis da NVIDIA: `nemotron-3-super-120b-a12b`, depois `nemotron-3-ultra-550b-a55b`, depois `nemotron-3.5-super-vl`. Quem troca de modelo quando um está sobrecarregado é o próprio OpenRouter (parâmetro `models`), numa chamada só. O pedido sai pronto do nó **Preparar pedido ao Gemini**, com o schema convertido para o formato da OpenAI. |
+| 7 | **Selecionar jogos** (Code) | Aplica as regras de corte (abaixo). Lê a resposta do Gemini ou, se ele falhou, a do Nemotron. Se os dois falharem, calcula a nota pelo peso dos times e o resumo sai mesmo assim. |
 | 7b | **Pedidos 365Scores** → **365Scores jogos** → **Casar transmissões** → **365Scores transmissão** → **Adicionar transmissão** | Descobre onde passa cada jogo selecionado, usando a API pública do site da 365Scores (sem chave, `userCountryId=21` = canais do Brasil). Uma chamada de lista por esporte (futebol, basquete, futebol americano) e uma de detalhe por jogo que tem transmissão. Os ids não batem com os da football-data/ESPN, então o jogo é casado pelo horário (±15 min) e pelo nome dos times, a mesma regra usada com a API-Football. Roda depois da seleção para buscar só o que vai para a pauta. Se a 365Scores falhar, a pauta sai sem a linha 📺, com aviso. |
 | 8 | **Salvar no Airtable** | *Upsert* pela coluna `ID`: rodar duas vezes no mesmo dia atualiza em vez de duplicar. |
 | 9 | **Montar mensagem** + **Telegram** | Monta uma mensagem só, com blocos Brasil / Copas / Europa / 🏈 NFL / 🏀 NBA. Só divide em mais de uma se passar do limite de 4096 caracteres do Telegram. |
@@ -152,7 +156,8 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
 - **Limpeza do histórico de execuções.** Os nós HTTP de lesões mantêm as respostas completas da ESPN (~10 MB por execução), por escolha do usuário. O `start-n8n.ps1` mantém a limpeza automática: execuções com mais de 7 dias são apagadas, e o SQLite é compactado ao iniciar.
 - **Transmissão vem de uma API não oficial.** A 365Scores não documenta a API do site, então ela pode mudar sem aviso. Por isso os nós têm `onError: continue` e a falha só tira a linha 📺 da mensagem. Ela é buscada depois da seleção, não antes, porque não influencia a nota.
 - **Uma chamada só ao LLM por dia**, com todos os jogos no mesmo pedido. Economiza cota e deixa o modelo comparar os jogos entre si.
-- **Falha não derruba o resumo.** O nó Gemini tenta de novo com intervalo de 5 s e, se continuar falhando, a nota sai do peso dos times e a mensagem avisa que foi sem LLM. Se a ESPN cair, o resumo sai sem a Europa League, a NFL ou a NBA, com aviso.
+- **Modelo de reserva: Nemotron via OpenRouter.** O Gemini grátis às vezes devolve 503 de alta demanda. Em 17/10/2026 foram testados os Nemotron gratuitos do OpenRouter com o prompt real (21 jogos): o **Super 120B** com raciocínio desligado respondeu em ~30 s com notas quase iguais às do Gemini (13 de 21 iguais, os outros 8 a só 1 ponto de diferença); com raciocínio ligado levava ~150 s sem ganho visível. O **Ultra 550B** estava sobrecarregado nos testes, o **3.5 Lightning** não respondeu em 4 min e o **3.5 Super VL** respondeu rápido mas deu notas mais baixas na NFL. Daí a fila Super → Ultra → Super VL. O plano grátis do OpenRouter dá 50 pedidos por dia, e o fluxo usa no máximo 1 (só quando o Gemini falha). A mensagem avisa (ℹ️) quando a pauta foi feita pela reserva.
+- **Falha não derruba o resumo.** O nó Gemini tenta de novo com intervalo de 5 s; se continuar falhando, entra o Nemotron; se ele também falhar, a nota sai do peso dos times e a mensagem avisa que foi sem LLM. Se a ESPN cair, o resumo sai sem a Europa League, a NFL ou a NBA, com aviso.
 - **Configuração no Airtable, não no código.** Campeonatos, limites e peso dos times são editáveis por quem não programa. Ver o [manual de uso](docs/MANUAL.md).
 - **Segredos fora do fluxo.** Tokens ficam no `.env` e nas credenciais do n8n. O JSON exportado neste repositório não tem nenhuma chave.
 
@@ -183,7 +188,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
 
 ## Como rodar
 
-**Pré-requisitos:** Node.js 20–24 (o n8n ainda não roda no Node 26) e contas gratuitas em [football-data.org](https://www.football-data.org/client/register), [API-Football](https://dashboard.api-football.com/register), [Google AI Studio](https://aistudio.google.com/apikey), [Airtable](https://airtable.com) e um bot criado no [@BotFather](https://t.me/BotFather).
+**Pré-requisitos:** Node.js 20–24 (o n8n ainda não roda no Node 26) e contas gratuitas em [football-data.org](https://www.football-data.org/client/register), [API-Football](https://dashboard.api-football.com/register), [Google AI Studio](https://aistudio.google.com/apikey), [OpenRouter](https://openrouter.ai/keys) (opcional, modelo de reserva), [Airtable](https://airtable.com) e um bot criado no [@BotFather](https://t.me/BotFather).
 
 1. **Airtable:** crie uma base com as tabelas `Campeonatos`, `Times` e `Jogos` (campos descritos no [manual](docs/MANUAL.md#estrutura-do-airtable)) e importe os CSVs da pasta `airtable/`. Gere um *personal access token* com acesso a essa base.
 2. **Segredos:** copie `.env.example` para `.env` e preencha.

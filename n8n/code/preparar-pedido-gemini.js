@@ -1,6 +1,7 @@
 // Nó Code "Preparar pedido ao Gemini" (modo: Run Once for All Items)
 // Junta cada jogo com a posição dos times na tabela e os desfalques, e monta o corpo da chamada ao Gemini,
 // pedindo a resposta em JSON com formato fixo (responseSchema).
+// Monta também o pedido de reserva ao OpenRouter (Nemotron), com o mesmo prompt, usado só se o Gemini falhar.
 
 const { data, jogos } = $('Montar jogos do dia').first().json;
 
@@ -98,4 +99,29 @@ const body = {
   },
 };
 
-return [{ json: { totalJogos: jogos.length, body } }];
+// Reserva: o OpenRouter usa o formato da OpenAI. "models" é a fila de modelos grátis: se o primeiro estiver
+// sobrecarregado ou sem cota, o próprio OpenRouter tenta o próximo. Raciocínio desligado: com ele, o Super
+// levava ~150 s; sem ele, ~30 s, com notas praticamente iguais às do Gemini nos testes.
+const paraOpenAI = (s) => s.type === 'OBJECT'
+  ? { type: 'object', properties: Object.fromEntries(Object.entries(s.properties).map(([k, v]) => [k, paraOpenAI(v)])), required: s.required, additionalProperties: false }
+  : s.type === 'ARRAY' ? { type: 'array', items: paraOpenAI(s.items) } : { type: s.type.toLowerCase() };
+
+const bodyOpenRouter = {
+  models: [
+    'nvidia/nemotron-3-super-120b-a12b:free',
+    'nvidia/nemotron-3-ultra-550b-a55b:free',
+    'nvidia/nemotron-3.5-super-vl:free',
+  ],
+  reasoning: { enabled: false },
+  temperature: 0.4,
+  messages: [
+    { role: 'system', content: instrucoes },
+    { role: 'user', content: body.contents[0].parts[0].text },
+  ],
+  response_format: {
+    type: 'json_schema',
+    json_schema: { name: 'pauta', strict: true, schema: paraOpenAI(body.generationConfig.responseSchema) },
+  },
+};
+
+return [{ json: { totalJogos: jogos.length, body, bodyOpenRouter } }];

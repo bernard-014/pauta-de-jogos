@@ -3,7 +3,7 @@
 // O Telegram aceita até 4096 caracteres por mensagem; só se passar disso o texto é dividido em mais de uma.
 
 const LIMITE = 3900;
-const { data, jogos, llmFalhou, totalAnalisados, transmissaoFalhou } = $('Adicionar transmissão').first().json;
+const { data, jogos, llmFalhou, llmReserva, totalAnalisados, transmissaoFalhou } = $('Adicionar transmissão').first().json;
 const { espnFalhou, nflFalhou, nbaFalhou, nflLesoesFalhou, nbaLesoesFalhou, erroFutebol } = $('Montar jogos do dia').first().json;
 
 const html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -23,7 +23,8 @@ const cabecalho = jogos.length
   : `📅 <b>Pauta de hoje: ${html(dia)}</b>\nHoje não tem jogos dos campeonatos acompanhados.`;
 
 const avisos = [];
-if (llmFalhou) avisos.push('⚠️ O Gemini não respondeu hoje: notas calculadas pelo peso dos times, sem briefing.');
+if (llmFalhou) avisos.push('⚠️ Nem o Gemini nem o Nemotron (reserva) responderam hoje: notas calculadas pelo peso dos times, sem briefing.');
+if (llmReserva) avisos.push(`ℹ️ O Gemini não respondeu hoje: notas e briefings feitos pelo modelo reserva (${html(llmReserva.replace(/^nvidia\//, '').replace(/:free$/, ''))}).`);
 if (espnFalhou) avisos.push('⚠️ A ESPN não respondeu: a Europa League pode estar faltando.');
 if (nflFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NFL podem estar faltando.');
 if (nbaFalhou) avisos.push('⚠️ A ESPN não respondeu: os jogos da NBA podem estar faltando.');
