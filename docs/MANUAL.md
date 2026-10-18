@@ -27,6 +27,18 @@ No mesmo chat do Telegram dá para perguntar a qualquer hora, digitando ou manda
 
 A resposta pode levar até um minuto para chegar. Quando a pergunta é por áudio, a resposta começa com 🎤 e o que o bot entendeu. Se ele entendeu errado, escreva a pergunta. Canal de transmissão só existe para os jogos da pauta. Para os outros jogos, o bot avisa que não sabe onde passa. O bot só responde neste chat e só funciona com o n8n ligado.
 
+## Como foram os jogos de ontem
+
+Às 6h30 chega uma mensagem com o resultado dos jogos da pauta de ontem. Cada jogo tem duas notas: a da pauta (de manhã, antes do jogo) e a de depois do jogo (o quanto ele valeu de verdade), as duas de 1 a 5. Exemplo: *"Nota 4 → 2"* é um jogo que prometia e saiu morno.
+
+- 📈 **Surpreenderam**: valeram 2 pontos ou mais do que a pauta previu.
+- 📉 **Decepcionaram**: valeram 2 pontos ou mais a menos.
+- 🎯 **Como previsto**: mesma nota ou 1 ponto de diferença.
+
+No topo vem o acerto do dia, por exemplo *"7 de 15 na mosca"*. A nota de depois do jogo também é dada pelo LLM, a partir do placar, dos gols e dos lances (a ESPN informa quem marcou e quando). A frase de cada jogo cita só o que veio nesses dados, mas confira antes de usar no ar. Se você discordar da nota, corrija a coluna **Nota do jogo** no Airtable: com o tempo, isso vira um gabarito para melhorar as notas da pauta.
+
+Se a pauta de ontem não tiver nenhum jogo (por exemplo, com o PC desligado às 7h), não chega mensagem. Se aparecer *"O Gemini não respondeu"*, vêm só os placares, sem a nota de depois do jogo.
+
 ## Onde ver todos os jogos
 
 Na base **Pauta de Jogos** do Airtable, tabela **Jogos**, view **Jogos do Dia**. Lá ficam todos os jogos selecionados, com:
@@ -38,7 +50,11 @@ Na base **Pauta de Jogos** do Airtable, tabela **Jogos**, view **Jogos do Dia**.
 | Briefing | O mesmo texto da mensagem |
 | Desfalques | Até 3 lesionados ou suspensos relevantes (vazio quando não há) |
 | Transmissão | Canais que passam o jogo no Brasil, segundo a 365Scores (vazio quando não há) |
-| Status | Agendado, Ao vivo, Encerrado, Adiado ou Cancelado (no momento da coleta) |
+| Status | Agendado, Ao vivo, Encerrado, Adiado ou Cancelado (no momento da coleta; o resumo das 6h30 atualiza para o resultado final) |
+| Placar | Resultado final (preenchido às 6h30 do dia seguinte) |
+| Nota do jogo | 1 a 5, a nota de depois do jogo |
+| Como foi | Uma ou duas frases sobre o jogo |
+| Acerto da nota | Na mosca, Perto (1 ponto), Superou ou Decepcionou (2 pontos ou mais) |
 
 ## Como mudar o que entra na pauta
 
@@ -100,6 +116,10 @@ Tabela **Times**:
 | Briefing | Texto longo |
 | Desfalques | Texto longo |
 | Transmissão | Texto curto |
+| Placar | Texto curto |
+| Nota do jogo | Número inteiro |
+| Como foi | Texto longo |
+| Acerto da nota | Seleção: `Na mosca`, `Perto`, `Superou`, `Decepcionou` |
 
 ## Quando algo dá errado
 

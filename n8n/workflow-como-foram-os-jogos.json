@@ -1,0 +1,550 @@
+{
+  "name": "Como foram os jogos",
+  "nodes": [
+    {
+      "name": "Todo dia às 6h30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 6,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "af4dfab2-ae27-fa68-f556-b7e7df9c902f"
+    },
+    {
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {},
+      "id": "aa1c1795-fbce-e396-bb3e-c2a0d04c8bd8"
+    },
+    {
+      "name": "Dia da pauta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        100
+      ],
+      "notes": "Ontem, no horário de Brasília. Para revisar outro dia, troque o valor por uma data fixa (AAAA-MM-DD).",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fa30c26f-2413-5e93-4900-4e4aecaa1fab",
+              "name": "data",
+              "type": "string",
+              "value": "={{ $now.setZone('America/Sao_Paulo').minus({ days: 1 }).toFormat('yyyy-MM-dd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "056f295a-1ef8-3009-e9ba-9f80e9e93fb7"
+    },
+    {
+      "name": "Jogos da pauta",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        100
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Jogos"
+        },
+        "filterByFormula": "=DATETIME_FORMAT({Data}, 'YYYY-MM-DD') = '{{ $json.data }}'",
+        "options": {}
+      },
+      "id": "bfbd1012-aab1-6d62-01cd-7383f9945319",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "name": "Campeonatos",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        100
+      ],
+      "executeOnce": true,
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Campeonatos"
+        },
+        "options": {}
+      },
+      "id": "1188f1e8-8ae8-20dd-fb25-18e3e4f995be",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "name": "Times",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        100
+      ],
+      "executeOnce": true,
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Times"
+        },
+        "options": {}
+      },
+      "id": "04f74e0e-e668-5093-e1d9-ea41a20d65d2",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "name": "Buscar placares",
+      "position": [
+        1100,
+        100
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Nó Code \"Buscar placares\" do workflow \"Como foram os jogos\" (modo: Run Once for All Items)\n// Busca o resultado dos jogos que entraram na pauta do dia anterior (tabela Jogos do Airtable).\n// - football-data: o placar oficial dos jogos \"fd-<id>\", numa chamada só, pelos ids.\n// - ESPN: para todos os jogos, porque o placar dela traz o \"como foi\": minuto e autor dos gols, expulsões,\n//   posse de bola, placar por quarto e destaques da NBA/NFL. A ESPN não aceita intervalo de datas, então é\n//   uma chamada por liga e por dia (o dia é o dos EUA: um jogo da NBA às 0h30 de Brasília ainda é \"ontem\" lá).\n// As respostas da ESPN (40 a 200 KB por liga) são enxugadas aqui, para a execução não guardar o que não usa.\n// As chamadas ficam neste Code, e não em nós HTTP, porque as duas fontes nem sempre são usadas: com nós HTTP\n// seria preciso IF + Merge, e o Merge trava quando um dos lados não tem item. O token sai das mensagens de erro.\n\nconst TZ = 'America/Sao_Paulo';\nconst token = $env.FOOTBALL_DATA_TOKEN;\nconst semSegredo = (e) => String(e?.message ?? e).split(token).join('***');\nconst campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });\n\nconst { data } = $('Dia da pauta').first().json;\n\n// Caminho de cada campeonato na ESPN (o código é o da tabela Campeonatos)\nconst CAMINHO_ESPN = {\n  BSA: 'soccer/bra.1',\n  CLI: 'soccer/conmebol.libertadores',\n  CL: 'soccer/uefa.champions',\n  PL: 'soccer/eng.1',\n  PD: 'soccer/esp.1',\n  SA: 'soccer/ita.1',\n  BL1: 'soccer/ger.1',\n  FL1: 'soccer/fra.1',\n  'uefa.europa': 'soccer/uefa.europa',\n  nfl: 'football/nfl',\n  nba: 'basketball/nba',\n};\n\nconst campeonatos = new Map($('Campeonatos').all().map(campos).map((c) => [c.id, c]));\n\n// Sem jogo no dia, o Airtable devolve um item vazio (Always Output Data): ele fica de fora aqui\nconst jogos = $('Jogos da pauta').all().map(campos).filter((j) => j.ID).map((j) => {\n  const c = campeonatos.get((j.Campeonato ?? [])[0]) ?? {};\n  return {\n    id: j.ID,\n    campeonato: c.Nome ?? '',\n    codigo: c['Código'] ?? '',\n    caminhoEspn: CAMINHO_ESPN[c['Código']] ?? null,\n    horario: j['Horário'],\n    mandante: j.Mandante,\n    visitante: j.Visitante,\n    nota: j.Nota,\n    porQueANota: j['Por que a nota'] ?? '',\n    briefing: j.Briefing ?? '',\n  };\n});\n\nconst falhas = [];\n\n// ---------- football-data ----------\nconst idsFD = jogos.filter((j) => j.id.startsWith('fd-')).map((j) => j.id.slice(3));\nlet fd = [];\nif (idsFD.length) {\n  try {\n    const r = await this.helpers.httpRequest({\n      url: 'https://api.football-data.org/v4/matches',\n      qs: { ids: idsFD.join(',') },\n      headers: { 'X-Auth-Token': token },\n      json: true,\n      timeout: 30000,\n    });\n    fd = (r.matches ?? []).map((m) => ({\n      id: `fd-${m.id}`,\n      status: m.status,\n      nomesMandante: [m.homeTeam.name, m.homeTeam.shortName].filter(Boolean),\n      nomesVisitante: [m.awayTeam.name, m.awayTeam.shortName].filter(Boolean),\n      final: m.score.fullTime,\n      intervalo: m.score.halfTime,\n      duracao: m.score.duration,\n      penaltis: m.score.penalties ?? null,\n    }));\n  } catch (e) {\n    falhas.push(`football-data: ${semSegredo(e).slice(0, 200)}`);\n  }\n}\n\n// ---------- ESPN ----------\nconst lado = (t) => {\n  const nota = (t.leaders ?? []).find((l) => l.name === 'rating')?.leaders?.[0];\n  return {\n    id: String(t.team.id),\n    nomes: [t.team.displayName, t.team.shortDisplayName, t.team.name].filter(Boolean),\n    homeAway: t.homeAway,\n    placar: t.score,\n    parciais: (t.linescores ?? []).map((l) => l.value),\n    // NBA: \"P. Banchero 24 PTS, 7 REB\". Na NFL o destaque vem na manchete do jogo.\n    destaque: nota ? `${nota.athlete?.shortName ?? nota.athlete?.displayName}: ${nota.displayValue}` : null,\n    estatisticas: Object.fromEntries((t.statistics ?? [])\n      .filter((s) => ['possessionPct', 'shotsOnTarget', 'totalShots'].includes(s.name))\n      .map((s) => [s.name, s.displayValue])),\n  };\n};\nconst enxugar = (caminho, ev) => {\n  const c = ev.competitions[0];\n  return {\n    id: String(ev.id),\n    caminho,\n    utc: ev.date,\n    estado: ev.status.type.state, // pre, in, post\n    statusNome: ev.status.type.name, // STATUS_FINAL, STATUS_POSTPONED...\n    detalhe: ev.status.type.detail, // \"Final/OT\", \"FT\", \"AET\"...\n    lados: c.competitors.map(lado),\n    lances: (c.details ?? [])\n      .filter((d) => d.scoringPlay || d.redCard)\n      .map((d) => ({\n        minuto: d.clock?.displayValue ?? '',\n        gol: !!d.scoringPlay,\n        vermelho: !!d.redCard,\n        penalti: !!d.penaltyKick,\n        contra: !!d.ownGoal,\n        jogador: d.athletesInvolved?.[0]?.displayName ?? '',\n        timeId: String(d.team?.id ?? ''),\n      })),\n    manchete: c.headlines?.[0]?.description ?? c.headlines?.[0]?.shortLinkText ?? null,\n  };\n};\n\nconst pedidosESPN = new Set();\nfor (const j of jogos) {\n  if (!j.caminhoEspn || !j.horario) continue;\n  const diaEUA = DateTime.fromISO(j.horario).setZone('America/New_York').toFormat('yyyyMMdd');\n  pedidosESPN.add(`${j.caminhoEspn}|${diaEUA}`);\n}\n\nconst espn = [];\nfor (const pedido of pedidosESPN) {\n  const [caminho, dia] = pedido.split('|');\n  try {\n    const r = await this.helpers.httpRequest({\n      url: `https://site.api.espn.com/apis/site/v2/sports/${caminho}/scoreboard`,\n      qs: { dates: dia },\n      json: true,\n      timeout: 30000,\n    });\n    for (const ev of r.events ?? []) espn.push(enxugar(caminho, ev));\n  } catch (e) {\n    falhas.push(`ESPN ${caminho} ${dia}: ${semSegredo(e).slice(0, 200)}`);\n  }\n}\n\nreturn [{ json: { data, jogos, fd, espn, falhas } }];\n"
+      },
+      "id": "9a6ebcf2-3d23-422c-8486-9b23e2607749"
+    },
+    {
+      "name": "Montar resultados",
+      "position": [
+        1320,
+        100
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Nó Code \"Montar resultados\" do workflow \"Como foram os jogos\" (modo: Run Once for All Items)\n// Para cada jogo da pauta, junta o placar e os fatos do jogo: gols com minuto, expulsões, virada,\n// gol decisivo no fim, prorrogação, placar por quarto, destaques. Os fatos são calculados aqui, no código,\n// e não pelo Gemini: conta de placar e de minuto o modelo pode errar; o código, não.\n// Jogos da football-data são achados na ESPN pelo horário (±15 min) e pelo nome dos times, a mesma regra\n// usada com a API-Football e a 365Scores. Se não achar, o jogo fica só com o placar da football-data.\n\nconst TOLERANCIA = 15 * 60 * 1000;\nconst { data, jogos, fd, espn, falhas } = $('Buscar placares').first().json;\n\nconst campos = (item) => ({ id: item.json.id, ...(item.json.fields ?? item.json) });\nconst semAcento = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();\nconst times = new Map();\nfor (const t of $('Times').all().map(campos)) {\n  for (const nome of (t['Nomes nas APIs'] ?? '').split(',')) {\n    if (nome.trim()) times.set(semAcento(nome), t.Nome);\n  }\n}\n\nconst GENERICAS = new Set(['fc', 'cf', 'ac', 'sc', 'afc', 'cd', 'ca', 'ec', 'se', 'rc', 'ssc', 'as', 'club', 'clube', 'de', 'da', 'do', 'the', 'calcio', 'futebol', 'football', 'esporte']);\nconst palavras = (s) => semAcento(s).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((p) => p.length > 1 && !GENERICAS.has(p));\nconst parecido = (nomesApi, nomes) => {\n  let melhor = 0;\n  for (const nomeApi of nomesApi) {\n    const canonico = times.get(semAcento(nomeApi));\n    if (canonico && nomes.some((n) => times.get(semAcento(n)) === canonico || n === canonico)) return 1;\n    const a = palavras(nomeApi);\n    for (const n of nomes) {\n      const b = palavras(n);\n      if (!a.length || !b.length) continue;\n      const comuns = a.filter((p) => b.some((q) => p === q || (Math.min(p.length, q.length) >= 3 && (p.startsWith(q) || q.startsWith(p)))));\n      melhor = Math.max(melhor, comuns.length / Math.min(a.length, b.length));\n    }\n  }\n  return melhor;\n};\n\n// Acha o jogo na ESPN e devolve [mandante, visitante] já na ordem da pauta\nconst acharNaESPN = (j, nomesMandante, nomesVisitante) => {\n  if (j.id.startsWith('espn-')) {\n    const ev = espn.find((e) => `espn-${e.id}` === j.id);\n    if (!ev) return null;\n    return { ev, casa: ev.lados.find((l) => l.homeAway === 'home'), fora: ev.lados.find((l) => l.homeAway === 'away') };\n  }\n  const inicio = DateTime.fromISO(j.horario).toMillis();\n  let melhor = null;\n  let pontos = 0;\n  for (const ev of espn) {\n    if (ev.caminho !== j.caminhoEspn) continue;\n    if (Math.abs(DateTime.fromISO(ev.utc).toMillis() - inicio) > TOLERANCIA) continue;\n    const [a, b] = ev.lados;\n    // Testa também invertido, caso uma fonte troque mandante e visitante\n    const direto = parecido(a.nomes, nomesMandante) + parecido(b.nomes, nomesVisitante);\n    const invertido = parecido(a.nomes, nomesVisitante) + parecido(b.nomes, nomesMandante);\n    if (Math.max(direto, invertido) > pontos) {\n      pontos = Math.max(direto, invertido);\n      melhor = direto >= invertido ? { ev, casa: a, fora: b } : { ev, casa: b, fora: a };\n    }\n  }\n  // Pelo menos um time inteiro reconhecido (o horário já filtrou quase tudo)\n  return pontos >= 1 ? melhor : null;\n};\n\nconst statusFD = {\n  FINISHED: 'Encerrado', AWARDED: 'Encerrado', IN_PLAY: 'Ao vivo', PAUSED: 'Ao vivo',\n  POSTPONED: 'Adiado', SUSPENDED: 'Adiado', CANCELLED: 'Cancelado', SCHEDULED: 'Agendado', TIMED: 'Agendado',\n};\nconst statusESPN = (ev) => {\n  if (ev.statusNome === 'STATUS_POSTPONED') return 'Adiado';\n  if (ev.statusNome === 'STATUS_CANCELED') return 'Cancelado';\n  return { pre: 'Agendado', in: 'Ao vivo', post: 'Encerrado' }[ev.estado] ?? ev.statusNome;\n};\n\n// \"90'+3'\" -> 93\nconst minutoEmNumero = (s) => {\n  const m = String(s).match(/(\\d+)'?(?:\\s*\\+\\s*(\\d+))?/);\n  return m ? Number(m[1]) + Number(m[2] ?? 0) : 0;\n};\n\nconst resultados = jogos.map((j) => {\n  const m = fd.find((x) => x.id === j.id);\n  const nomesMandante = [j.mandante, ...(m?.nomesMandante ?? [])];\n  const nomesVisitante = [j.visitante, ...(m?.nomesVisitante ?? [])];\n  const achado = acharNaESPN(j, nomesMandante, nomesVisitante);\n  const ev = achado?.ev;\n\n  const situacao = m ? (statusFD[m.status] ?? m.status) : ev ? statusESPN(ev) : 'Sem dados';\n  const golsCasa = m?.final?.home ?? (achado ? Number(achado.casa.placar) : null);\n  const golsFora = m?.final?.away ?? (achado ? Number(achado.fora.placar) : null);\n  const temPlacar = situacao === 'Encerrado' && golsCasa != null && golsFora != null;\n\n  const r = {\n    ...j,\n    situacao,\n    placar: temPlacar ? `${golsCasa} x ${golsFora}` : null,\n    detalhesDaESPN: !!ev,\n    fatos: {},\n  };\n  if (!temPlacar) return r;\n\n  const f = r.fatos;\n  const futebol = !['nfl', 'nba'].includes(j.codigo);\n  f.placar = `${j.mandante} ${golsCasa} x ${golsFora} ${j.visitante}`;\n  const margem = Math.abs(golsCasa - golsFora);\n\n  if (futebol) {\n    if (m?.intervalo?.home != null) f.intervalo = `${m.intervalo.home} x ${m.intervalo.away}`;\n    if (m?.duracao === 'EXTRA_TIME') f.prorrogacao = 'decidido na prorrogação';\n    if (m?.duracao === 'PENALTY_SHOOTOUT') f.prorrogacao = `decidido nos pênaltis (${m.penaltis?.home} x ${m.penaltis?.away})`;\n    if (margem >= 3) f.goleada = true;\n\n    if (ev) {\n      const nomeDoTime = (id) => (id === achado.casa.id ? j.mandante : id === achado.fora.id ? j.visitante : '?');\n      const gols = ev.lances.filter((l) => l.gol).sort((a, b) => minutoEmNumero(a.minuto) - minutoEmNumero(b.minuto));\n      f.gols = gols.map((g) => `${g.minuto} ${g.jogador}${g.penalti ? ' (pênalti)' : ''}${g.contra ? ' (contra)' : ''} - ${nomeDoTime(g.timeId)}`);\n      const expulsoes = ev.lances.filter((l) => l.vermelho);\n      if (expulsoes.length) f.expulsoes = expulsoes.map((l) => `${l.minuto} ${l.jogador} - ${nomeDoTime(l.timeId)}`);\n\n      // Virada, empate arrancado e gol decisivo no fim, refazendo o placar gol a gol.\n      // Só confia na linha do tempo se a soma dos gols bater com o placar final.\n      if (gols.length === golsCasa + golsFora) {\n        let c = 0;\n        let v = 0;\n        let casaPerdeu = false;\n        let foraPerdeu = false;\n        let decisivo = null;\n        for (const g of gols) {\n          const antes = Math.sign(c - v);\n          if (g.timeId === achado.casa.id) c++; else v++;\n          if (c < v) casaPerdeu = true;\n          if (v < c) foraPerdeu = true;\n          // Gol que mudou o resultado (empate virou vitória ou derrota virou empate) a partir dos 85'\n          if (minutoEmNumero(g.minuto) >= 85 && Math.sign(c - v) !== antes) decisivo = `${g.minuto} ${g.jogador} (${nomeDoTime(g.timeId)})`;\n        }\n        if (golsCasa > golsFora && casaPerdeu) f.virada = `${j.mandante} virou o jogo`;\n        if (golsFora > golsCasa && foraPerdeu) f.virada = `${j.visitante} virou o jogo`;\n        if (golsCasa === golsFora && (casaPerdeu || foraPerdeu)) f.empateArrancado = true;\n        if (decisivo) f.golDecisivoNoFim = decisivo;\n      }\n\n      const est = (l) => l.estatisticas;\n      if (est(achado.casa).possessionPct) f.posseDeBola = `${est(achado.casa).possessionPct}% x ${est(achado.fora).possessionPct}%`;\n      if (est(achado.casa).shotsOnTarget) f.chutesNoGol = `${est(achado.casa).shotsOnTarget} x ${est(achado.fora).shotsOnTarget}`;\n    } else if (m?.intervalo?.home != null) {\n      // Sem a linha do tempo da ESPN, o intervalo ainda mostra se houve virada no segundo tempo\n      const int = Math.sign(m.intervalo.home - m.intervalo.away);\n      const fim = Math.sign(golsCasa - golsFora);\n      if (int !== 0 && fim !== 0 && int !== fim) f.virada = `${fim > 0 ? j.mandante : j.visitante} virou no segundo tempo`;\n    }\n  } else if (ev) {\n    // NFL e NBA: placar por quarto, prorrogação (mais de 4 parciais), destaques e manchete\n    const pc = achado.casa.parciais;\n    const pf = achado.fora.parciais;\n    f.parciais = pc.map((p, i) => `${i < 4 ? `${i + 1}º` : 'prorrogação'}: ${p} x ${pf[i]}`).join('; ');\n    if (pc.length > 4) f.prorrogacao = pc.length > 5 ? `${pc.length - 4} prorrogações` : 'decidido na prorrogação';\n    f.margemFinal = `${margem} pontos`;\n    const destaques = [achado.casa.destaque && `${j.mandante}: ${achado.casa.destaque}`, achado.fora.destaque && `${j.visitante}: ${achado.fora.destaque}`].filter(Boolean);\n    if (destaques.length) f.destaques = destaques;\n    if (ev.manchete) f.manchete = ev.manchete;\n  }\n  return r;\n});\n\nreturn [{ json: { data, jogos: resultados, falhas } }];\n"
+      },
+      "id": "543101f4-880f-2376-ef2c-2fd6000c077b"
+    },
+    {
+      "name": "Preparar avaliação",
+      "position": [
+        1540,
+        100
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Nó Code \"Preparar avaliação\" do workflow \"Como foram os jogos\" (modo: Run Once for All Items)\n// Monta o pedido ao Gemini para dar a nota de DEPOIS do jogo, na mesma escala de 1 a 5 da pauta.\n// O modelo recebe o contexto de antes do jogo (o briefing), mas NÃO recebe a nota prevista: assim ele\n// avalia o que aconteceu sem se ancorar no número da manhã, e a comparação entre as duas notas vale alguma coisa.\n\nconst { data, jogos } = $('Montar resultados').first().json;\n\nconst lista = jogos\n  .filter((j) => j.placar)\n  .map((j) => ({\n    id: j.id,\n    campeonato: j.campeonato,\n    jogo: `${j.mandante} x ${j.visitante}`,\n    antesDoJogo: [j.porQueANota, j.briefing].filter(Boolean).join(' '),\n    ...j.fatos,\n  }));\n\nconst instrucoes = `Você é editor de pauta de um canal de esportes brasileiro e revisa os jogos de ontem.\nTodos os jogos abaixo já terminaram. Para cada um, dê a nota que ele mereceu depois de jogado, de 1 a 5,\npensando no público brasileiro: o quanto valeu ter dado destaque a esse jogo.\n\nA nota junta a importância do jogo (\"antesDoJogo\" diz o que estava em jogo) com o que aconteceu em campo:\n5 = jogo para lembrar: virada, gol decisivo no fim, prorrogação ou overtime disputados, zebra grande, goleada de ou sobre time grande, jogo de muitos gols com placar apertado, ou jogo decisivo que cumpriu o que prometia.\n4 = bom jogo: disputado, resultado que mexe na tabela ou atuação de destaque de uma estrela.\n3 = jogo normal, resultado dentro do esperado.\n2 = jogo morno: favorito venceu sem sustos ou empate sem graça.\n1 = jogo muito fraco: 0 x 0 sem chances ou decidido cedo, sem nenhum interesse.\n\nNa NBA e na NFL, jogo decidido por poucos pontos ou na prorrogação vale mais; vitória folgada (mais de 15 pontos na NBA, mais de 14 na NFL) vale menos.\n\nRegras:\n- Use só os fatos fornecidos (placar, gols, expulsões, virada, parciais, destaques, manchete). Não invente lances, jogadores nem estatísticas.\n- Minuto de gol ou expulsão vai exatamente como nos fatos (\"aos 89 minutos\", \"nos acréscimos\" para 90'+): não converta para \"X do segundo tempo\".\n- \"comoFoi\": 1 ou 2 frases curtas em português do Brasil, em tom de jornalista esportivo, com o fato principal do jogo (quem decidiu, virada, goleada, zebra). Cite jogadores só se aparecerem nos fatos.\n- Avalie todos os jogos recebidos e devolva cada um com o mesmo id.`;\n\nconst body = {\n  systemInstruction: { parts: [{ text: instrucoes }] },\n  contents: [{ role: 'user', parts: [{ text: `Jogos da pauta de ${data}:\\n${JSON.stringify(lista, null, 1)}` }] }],\n  generationConfig: {\n    temperature: 0.3,\n    responseMimeType: 'application/json',\n    responseSchema: {\n      type: 'OBJECT',\n      properties: {\n        jogos: {\n          type: 'ARRAY',\n          items: {\n            type: 'OBJECT',\n            properties: {\n              id: { type: 'STRING' },\n              nota: { type: 'INTEGER' },\n              comoFoi: { type: 'STRING' },\n            },\n            required: ['id', 'nota', 'comoFoi'],\n          },\n        },\n      },\n      required: ['jogos'],\n    },\n  },\n};\n\nreturn [{ json: { totalAvaliados: lista.length, body } }];\n"
+      },
+      "id": "5169cede-2871-07a6-ef98-3a3b4cd22bfa"
+    },
+    {
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1760,
+        100
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "085f950f-8115-8d8d-f692-4a39b06dbbbb",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini (header)"
+        }
+      }
+    },
+    {
+      "name": "Comparar notas",
+      "position": [
+        1980,
+        100
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Nó Code \"Comparar notas\" do workflow \"Como foram os jogos\" (modo: Run Once for All Items)\n// Junta a nota de depois do jogo (Gemini) com a nota prevista na pauta e classifica cada jogo:\n// \"Na mosca\" (mesma nota), \"Perto\" (1 ponto de diferença), \"Superou\" ou \"Decepcionou\" (2 pontos ou mais).\n// Se o Gemini falhar, os placares seguem sem a nota de depois do jogo.\n\nconst { data, jogos, falhas } = $('Montar resultados').first().json;\nconst resposta = $('Gemini').first().json;\n\nlet avaliacoes = new Map();\nlet llmFalhou = false;\ntry {\n  const texto = resposta.candidates[0].content.parts.map((p) => p.text ?? '').join('');\n  avaliacoes = new Map(JSON.parse(texto).jogos.map((a) => [a.id, a]));\n} catch (e) {\n  llmFalhou = jogos.some((j) => j.placar);\n}\n\nconst acerto = (diferenca) => {\n  if (diferenca === 0) return 'Na mosca';\n  if (Math.abs(diferenca) === 1) return 'Perto';\n  return diferenca > 0 ? 'Superou' : 'Decepcionou';\n};\n\nconst resultado = jogos.map((j) => {\n  const a = avaliacoes.get(j.id);\n  const notaJogo = a && Number.isInteger(a.nota) ? Math.min(5, Math.max(1, a.nota)) : null;\n  const comparavel = j.placar && notaJogo != null && Number.isInteger(j.nota);\n  return {\n    ...j,\n    notaJogo,\n    comoFoi: a?.comoFoi ?? null,\n    diferenca: comparavel ? notaJogo - j.nota : null,\n    acerto: comparavel ? acerto(notaJogo - j.nota) : null,\n  };\n});\n\nconst avaliados = resultado.filter((j) => j.acerto);\nconst contar = (nome) => avaliados.filter((j) => j.acerto === nome).length;\nconst resumo = {\n  total: resultado.length,\n  avaliados: avaliados.length,\n  naMosca: contar('Na mosca'),\n  perto: contar('Perto'),\n  superou: contar('Superou'),\n  decepcionou: contar('Decepcionou'),\n};\n\nreturn [{ json: { data, jogos: resultado, resumo, llmFalhou, falhas } }];\n"
+      },
+      "id": "ff76cda6-8a29-1d6f-0a3f-602944b52af6"
+    },
+    {
+      "name": "Separar resultados",
+      "position": [
+        2200,
+        0
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Nó Code \"Separar resultados\" do workflow \"Como foram os jogos\" (modo: Run Once for All Items)\n// Um item por jogo, só com as colunas do resultado. O nó Airtable seguinte faz upsert pela coluna ID:\n// como só vão estas colunas, a nota, o briefing e os outros campos gravados pela pauta ficam como estão.\n\nconst { jogos } = $('Comparar notas').first().json;\n\nreturn jogos\n  .filter((j) => j.situacao !== 'Sem dados')\n  .map((j) => {\n    const campos = { ID: j.id, Status: j.situacao };\n    if (j.placar) campos['Placar'] = j.placar;\n    if (j.notaJogo != null) campos['Nota do jogo'] = j.notaJogo;\n    if (j.comoFoi) campos['Como foi'] = j.comoFoi;\n    if (j.acerto) campos['Acerto da nota'] = j.acerto;\n    return { json: campos };\n  });\n"
+      },
+      "id": "a89bcdf9-743e-c952-8186-3294ce5f0ccf"
+    },
+    {
+      "name": "Salvar resultados",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        0
+      ],
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.AIRTABLE_BASE_ID }}"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Jogos"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Placar",
+              "displayName": "Placar",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Nota do jogo",
+              "displayName": "Nota do jogo",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Como foi",
+              "displayName": "Como foi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Acerto da nota",
+              "displayName": "Acerto da nota",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "1a388144-13ae-91f1-b76b-e485701628f6",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable - Pauta de Jogos"
+        }
+      }
+    },
+    {
+      "name": "Montar mensagem",
+      "position": [
+        2200,
+        200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Nó Code \"Montar mensagem\" do workflow \"Como foram os jogos\" (modo: Run Once for All Items)\n// Mensagem do Telegram (HTML) com o resultado dos jogos da pauta de ontem e o acerto das notas.\n// Os jogos vêm separados em: os que surpreenderam, os que decepcionaram e os que saíram como previsto.\n// Sem jogo na pauta de ontem, não sai mensagem (nada para comparar).\n\nconst LIMITE = 3900;\nconst { data, jogos, resumo, llmFalhou, falhas } = $('Comparar notas').first().json;\nif (!jogos.length) return [];\n\nconst html = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst selo = (nota) => (nota === 5 ? '🔥' : nota === 4 ? '⭐' : '▫️');\nconst dia = DateTime.fromISO(data).setLocale('pt-BR').toFormat('cccc, dd/MM');\n\nconst cabecalho = [`📊 <b>Como foram os jogos: ${html(dia)}</b>`];\nif (resumo.avaliados) {\n  cabecalho.push('Nota da pauta → nota depois do jogo (1 a 5)');\n  const errou = resumo.superou + resumo.decepcionou;\n  cabecalho.push(`🎯 ${resumo.naMosca} de ${resumo.avaliados} na mosca · ${resumo.perto} por 1 ponto · ${errou} ${errou === 1 ? 'errou' : 'erraram'} por 2 ou mais`);\n}\n\nconst linhasDoJogo = (j) => {\n  const linhas = [`${selo(j.nota)} <b>${html(j.mandante)} ${html(j.placar)} ${html(j.visitante)}</b> · ${html(j.campeonato)}`];\n  if (j.notaJogo != null) linhas.push(`Nota ${j.nota} → ${j.notaJogo}`);\n  else linhas.push(`Nota da pauta: ${j.nota}`);\n  if (j.comoFoi) linhas.push(`<i>${html(j.comoFoi)}</i>`);\n  return linhas.join('\\n');\n};\n\n// Maior diferença primeiro dentro de cada grupo; empate pelo horário\nconst ordenar = (lista) => lista.sort((a, b) => Math.abs(b.diferenca ?? 0) - Math.abs(a.diferenca ?? 0) || String(a.horario).localeCompare(String(b.horario)));\nconst comPlacar = jogos.filter((j) => j.placar);\nconst grupos = [\n  { titulo: '📈 <b>SURPREENDERAM</b>', jogos: ordenar(comPlacar.filter((j) => j.acerto === 'Superou')) },\n  { titulo: '📉 <b>DECEPCIONARAM</b>', jogos: ordenar(comPlacar.filter((j) => j.acerto === 'Decepcionou')) },\n  { titulo: '🎯 <b>COMO PREVISTO</b>', jogos: ordenar(comPlacar.filter((j) => ['Na mosca', 'Perto'].includes(j.acerto))) },\n  { titulo: '📋 <b>RESULTADOS</b>', jogos: ordenar(comPlacar.filter((j) => !j.acerto)) },\n];\nconst semResultado = jogos.filter((j) => !j.placar);\n\nconst avisos = [];\nif (llmFalhou) avisos.push('⚠️ O Gemini não respondeu: placares sem a nota de depois do jogo.');\nif (falhas.length) avisos.push(`⚠️ Fonte fora do ar (${html(falhas.map((f) => f.split(':')[0]).join(', '))}): alguns jogos podem estar sem placar ou sem detalhes.`);\n\nconst mensagens = [];\nlet atual = cabecalho.join('\\n');\nconst fechar = () => { if (atual.trim()) mensagens.push(atual); atual = ''; };\nconst adicionar = (trecho) => {\n  if (atual && (atual + '\\n\\n' + trecho).length > LIMITE) fechar();\n  atual = atual ? `${atual}\\n\\n${trecho}` : trecho;\n};\n\nfor (const g of grupos) {\n  if (!g.jogos.length) continue;\n  adicionar(g.titulo);\n  for (const j of g.jogos) adicionar(linhasDoJogo(j));\n}\nif (semResultado.length) {\n  adicionar(['⏸️ <b>SEM RESULTADO</b>', ...semResultado.map((j) => `${html(j.mandante)} x ${html(j.visitante)}: ${html(j.situacao.toLowerCase())}`)].join('\\n'));\n}\nif (avisos.length) adicionar(avisos.join('\\n'));\nfechar();\n\nreturn mensagens.map((texto) => ({ json: { texto } }));\n"
+      },
+      "id": "06aea8b2-9c0e-1fa9-6225-50f7fb2d04bc"
+    },
+    {
+      "name": "Enviar no Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        200
+      ],
+      "webhookId": "a046748a-1bff-7fdc-a7d0-e9db0206e24c",
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.texto }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "aa8bce52-83da-e5f6-5cb7-1b87c3d273f7",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram - Resumo de Jogos"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Todo dia às 6h30": {
+      "main": [
+        [
+          {
+            "node": "Dia da pauta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Dia da pauta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dia da pauta": {
+      "main": [
+        [
+          {
+            "node": "Jogos da pauta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jogos da pauta": {
+      "main": [
+        [
+          {
+            "node": "Campeonatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campeonatos": {
+      "main": [
+        [
+          {
+            "node": "Times",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Times": {
+      "main": [
+        [
+          {
+            "node": "Buscar placares",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar placares": {
+      "main": [
+        [
+          {
+            "node": "Montar resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar resultados": {
+      "main": [
+        [
+          {
+            "node": "Preparar avaliação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar avaliação": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Comparar notas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comparar notas": {
+      "main": [
+        [
+          {
+            "node": "Separar resultados",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Montar mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar resultados": {
+      "main": [
+        [
+          {
+            "node": "Salvar resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar mensagem": {
+      "main": [
+        [
+          {
+            "node": "Enviar no Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo"
+  }
+}

@@ -63,6 +63,15 @@ Ideias e próximos passos para o resumo diário no Telegram. Tudo aqui é ideia 
 - [ ] Ferramenta de desfalques ao vivo (ESPN `injuries`) para jogos fora da pauta.
 - [ ] Avaliação do agente: um conjunto fixo de perguntas com resposta esperada, rodado depois de cada mudança de prompt (n8n Evaluations).
 
+## Como foram os jogos (avaliação das notas)
+- [x] Workflow **Como foram os jogos** (6h30): resultado dos jogos da pauta de ontem (football-data + ESPN), nota de depois do jogo pelo Gemini sem ver a nota prevista, comparação (Na mosca / Perto / Superou / Decepcionou), colunas novas no Airtable e mensagem no Telegram. Feito em 18/10/2026, testado localmente com as pautas reais de 16/10 e 17/10.
+- [x] Primeira execução real no n8n (execução 108, 18/10/2026): mensagem e Airtable OK. Ajustado o prompt para citar o minuto do gol como veio (o modelo tinha trocado 89' por "49 do segundo tempo").
+- [ ] Ativar o gatilho das 6h30.
+- [ ] Resumo da semana (segunda-feira): acerto acumulado por campeonato e por esporte, a partir das colunas *Acerto da nota* e *Nota do jogo*.
+- [ ] Gabarito humano: a produção corrige *Nota do jogo* quando discordar, e o acerto passa a ser medido contra a nota humana.
+- [ ] Usar os erros recorrentes para ajustar o prompt da pauta. Primeiro sinal: a pré-temporada da NBA está superavaliada (4 → 2 em três de seis jogos de 16/10).
+- [ ] Modelo de reserva (Nemotron) também nesta avaliação, como na pauta.
+
 ## Outras ideias
 - [ ] Formulário do Airtable para a equipe marcar "quero cobertura deste jogo", com aviso automático no Telegram.
 - [ ] Rodar o n8n em um servidor gratuito para o gatilho das 7h não depender do PC ligado.

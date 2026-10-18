@@ -13,7 +13,7 @@ Como fazer:
 2. Acrescente uma entrada no [Registro de mudanças](#registro-de-mudanças) no fim: data, agente (ex.: "Claude Code", "Codex"), o que foi feito, o que ficou pendente e onde (commit, branch, n8n publicado ou não).
 3. Se a mudança foi commitada, inclua a atualização deste arquivo **no mesmo commit**.
 4. Se você parar no meio (limite, erro, usuário mudou de assunto), registre o que ficou pela metade em [Trabalho em andamento](#trabalho-em-andamento) para o próximo agente continuar.
-5. Antes de começar qualquer tarefa, leia este arquivo inteiro e rode `git status` e `git log --oneline -5`. Pode haver trabalho de outro agente que ainda não foi registrado aqui.
+5. Antes de começar qualquer tarefa, leia este arquivo inteiro e rode `git status`, `git log --oneline -5` e `git fetch`. Pode haver trabalho de outro agente que ainda não foi registrado aqui, inclusive de uma sessão na nuvem numa branch do GitHub (ver [Trabalho na nuvem](#trabalho-na-nuvem-sessões-pelo-celular)).
 
 O próximo agente pode ser outro modelo, sem acesso à sua conversa nem à sua memória. Se não estiver escrito aqui ou no repositório, ele não sabe.
 
@@ -42,7 +42,7 @@ Documentação para humanos: [`README.md`](README.md) (arquitetura, decisões, c
 
 ## Estado atual (atualize sempre)
 
-_Última atualização: 2026-10-17, Claude Code (modelo de reserva Nemotron na pauta)._
+_Última atualização: 2026-10-18, Claude Code (workflow "Como foram os jogos")._
 
 | O quê | Situação |
 |---|---|
@@ -57,6 +57,7 @@ _Última atualização: 2026-10-17, Claude Code (modelo de reserva Nemotron na p
 | Transmissão (365Scores) | Implementada em 16/10/2026: 5 nós depois de `Selecionar jogos`, linha 📺 na mensagem e coluna `Transmissão` no Airtable (criada). **Aplicado e publicado no n8n**, validação sem erros. **Confirmado pelo usuário na execução 31** (linha 📺 apareceu). Commitado e enviado para a `main`. |
 | Bot que responde perguntas (AI Agent) | Criado em 17/10/2026: workflow `Bot da Pauta` (ativo) + subfluxos `Bot - pauta do dia` e `Bot - placar ESPN` (publicados). Texto e áudio testados de verdade (execuções 36, 38 e 49: transcrição correta, resposta com 🎤). Commitado (`91c97ed`) e enviado para a `main`. |
 | Modelo de reserva (Nemotron via OpenRouter) | Implementado em 17/10/2026: IF `Gemini respondeu?` + HTTP `Nemotron (reserva)` entre `Gemini` e `Selecionar jogos`. **Aplicado e publicado no n8n**, validação sem erros. Testado direto na API e localmente (3 cenários). Commitado na `main` com push. Falta uma execução real em que o Gemini falhe. |
+| Como foram os jogos (resultado × nota) | Criado em 18/10/2026: workflow `Como foram os jogos` (`rkBpz5jBl3ncIfdX`), **inativo** (gatilho das 6h30 ainda não ligado). Colunas `Placar`, `Nota do jogo`, `Como foi` e `Acerto da nota` criadas na tabela Jogos. Testado localmente (16/10 e 17/10, Gemini falhando, dia sem pauta) e **rodado de verdade pelo usuário na execução 108**: mensagem enviada, 15 jogos gravados no Airtable sem apagar as colunas da pauta. Commitado na branch `como-foram-os-jogos` (falta juntar na `main` e fazer push). |
 | Repositório GitHub | `bernard-014/pauta-de-jogos`, **privado**, `main` sincronizada com o GitHub (confira com `git log --oneline -3`; correção dos desfalques da NBA e novo `start-n8n.ps1` já enviados). |
 
 ### Trabalho em andamento
@@ -81,6 +82,23 @@ _Última atualização: 2026-10-17, Claude Code (modelo de reserva Nemotron na p
 
 ---
 
+## Trabalho na nuvem (sessões pelo celular)
+
+O usuário às vezes abre uma sessão do Claude Code **na nuvem** para mexer no projeto pelo celular. As duas sessões não conversam entre si: a da nuvem não avisa a local, e a local não lê a conversa da nuvem. **O único canal é o GitHub**: a nuvem commita numa branch e faz push; a local busca a branch e lê este arquivo.
+
+**Se você está na nuvem** (sem `D:\`, sem n8n em localhost, sem `.env`, sem MCP do n8n):
+- Você só mexe em código e documentação. O n8n, o Airtable e as credenciais ficam no PC do usuário, fora do seu alcance.
+- Não diga que algo "funciona": diga "não testado no n8n". Teste local com a ESPN pública pode valer se a rede deixar, mas sem chaves.
+- Commite na sua branch, com este arquivo atualizado no mesmo commit, e faça push. Não junte na `main`: isso é feito no PC, depois de aplicar e testar.
+- No [Registro de mudanças](#registro-de-mudanças), identifique-se como **"Claude Code (nuvem)"**, diga o nome da branch e acrescente uma linha **"Pendente aplicar no n8n local:"** com cada arquivo de `n8n/code/` que mudou, o workflow e o nó onde ele entra. Se nada precisar ir para o n8n, escreva "nada a aplicar no n8n".
+
+**Se você está no PC** (sessão local):
+- No começo de cada tarefa, rode `git fetch` e `git branch -r --no-merged main`. Se houver branch `claude/*` ou outra que não foi juntada, leia o registro de mudanças dela (`git show origin/<branch>:AGENTS.md`) e conte ao usuário o que encontrou antes de seguir.
+- Para incorporar: com o OK do usuário, junte a branch, aplique no n8n o que estiver "pendente aplicar" (procedimento padrão, por diferença), valide, peça ao usuário para testar e troque a linha por "aplicado no n8n em <data>".
+- Se a `main` local tiver trabalho sem commit, avise o usuário antes de ele abrir uma sessão na nuvem: ela parte do GitHub e não verá esse trabalho, e os dois `AGENTS.md` vão conflitar.
+
+---
+
 ## n8n
 
 ### Workflows
@@ -92,6 +110,7 @@ _Última atualização: 2026-10-17, Claude Code (modelo de reserva Nemotron na p
 | Bot da Pauta | `Odzi5fJPjPehzrDK` | Bot do Telegram com AI Agent. Ativo, roda a cada minuto. |
 | Bot - pauta do dia | `cw7aVcN4GxUye4pS` | Subfluxo-ferramenta do bot (Airtable). Publicado. |
 | Bot - placar ESPN | `FYRpySMCGqCRLS1t` | Subfluxo-ferramenta do bot (ESPN). Publicado. |
+| Como foram os jogos | `rkBpz5jBl3ncIfdX` | Resultado da pauta de ontem × nota prevista, às 6h30. Inativo até o primeiro teste real. |
 
 O n8n tem modelo rascunho/publicado. Em workflow ativo, as atualizações via `n8n_update_partial_workflow` foram publicadas na hora (confira com `n8n_get_workflow` no modo `active`).
 
@@ -143,6 +162,25 @@ O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
 | Resumir pauta (subfluxo) | `n8n/code/bot-resumir-pauta.js` |
 | Montar URL (subfluxo) | `n8n/code/bot-montar-url-espn.js` |
 | Resumir placar (subfluxo) | `n8n/code/bot-resumir-placar.js` |
+
+### Como foram os jogos
+
+`Todo dia às 6h30` (Schedule) e manual → `Dia da pauta` (Set: ontem; troque por uma data fixa para revisar outro dia) → `Jogos da pauta` (Airtable search pela `Data`, `alwaysOutputData`) → `Campeonatos` e `Times` (Airtable, `executeOnce`) → `Buscar placares` (Code) → `Montar resultados` (Code) → `Preparar avaliação` (Code) → `Gemini` (HTTP, credencial `Gemini (header)`, retry, `onError: continue`) → `Comparar notas` (Code) → `Separar resultados` → `Salvar resultados` (Airtable upsert pelo `ID`, só as colunas do resultado) e `Montar mensagem` → `Enviar no Telegram`.
+
+- Neste workflow, base do Airtable e chat do Telegram vêm do `$env` também no n8n vivo, então o JSON do repositório só difere nos IDs de credencial. Ele é gerado a partir dos arquivos `n8n/code/resultados-*.js` (script descartável que lê os arquivos, grava o JSON e troca o `jsCode` pela API do n8n).
+- `Buscar placares` chama a football-data (`/v4/matches?ids=...`, token `$env.FOOTBALL_DATA_TOKEN`, tirado das mensagens de erro) e o scoreboard da ESPN (uma chamada por liga e por dia dos EUA; **a ESPN não aceita intervalo de datas**, dá 400) dentro do Code, para evitar IF + Merge com ramos vazios.
+- O plano grátis da football-data só traz placar final e do intervalo, sem gols. Os gols, expulsões e estatísticas vêm do `competitions[0].details` e `statistics` da ESPN; NBA/NFL trazem `linescores` por quarto, `leaders` (o `rating` resume "24 PTS, 7 REB") e `headlines`.
+- O Gemini não recebe a nota prevista (avaliação cega). Virada, gol decisivo (≥85' mudando o resultado), empate arrancado e goleada são calculados no código.
+- Sem jogo na pauta de ontem, não sai mensagem nem gravação.
+
+| Nó | Arquivo |
+|---|---|
+| Buscar placares | `n8n/code/resultados-buscar-placares.js` |
+| Montar resultados | `n8n/code/resultados-montar.js` |
+| Preparar avaliação | `n8n/code/resultados-preparar-avaliacao.js` |
+| Comparar notas | `n8n/code/resultados-comparar-notas.js` |
+| Separar resultados | `n8n/code/resultados-separar-airtable.js` |
+| Montar mensagem | `n8n/code/resultados-montar-mensagem.js` |
 
 Os nós Code se referem uns aos outros pelo nome (`$('Montar jogos do dia')`, `$('ESPN NBA')`...). **Renomear um nó quebra o código.**
 
@@ -198,7 +236,7 @@ Base **Pauta de Jogos** (o ID não fica no repositório: está no `.env` e nos n
 
 - **Campeonatos**: `Nome`, `Código` (código na API: `BSA`, `CLI`, `CL`, `PL`, `PD`, `SA`, `BL1`, `FL1`, `uefa.europa`, `nfl`, `nba`), `Fonte` (`football-data` | `ESPN`), `Bloco` (`Brasil` | `Copas` | `Europa` | `NFL` | `NBA`), `Todos os jogos`, `Limite nota 4`, `Ordem`, `Ativo`.
 - **Times**: `Nome`, `Peso` (3 gigante, 2 forte, 0 ou ausente = sem destaque), `Nomes nas APIs` (grafias separadas por vírgula). Futebol, NFL e NBA ficam **na mesma tabela**.
-- **Jogos**: `ID` (`fd-<id>` ou `espn-<id>`, chave do upsert), `Data` (dia da pauta), `Horário`, `Campeonato` (link), `Mandante`, `Visitante`, `Status`, `Nota`, `Por que a nota`, `Briefing`, `Desfalques` (texto longo, criado em 2026-10-16), `Transmissão` (texto curto, criado em 2026-10-16).
+- **Jogos**: `ID` (`fd-<id>` ou `espn-<id>`, chave do upsert), `Data` (dia da pauta), `Horário`, `Campeonato` (link), `Mandante`, `Visitante`, `Status`, `Nota`, `Por que a nota`, `Briefing`, `Desfalques` (texto longo, criado em 2026-10-16), `Transmissão` (texto curto, criado em 2026-10-16), `Placar` (texto curto), `Nota do jogo` (número inteiro), `Como foi` (texto longo) e `Acerto da nota` (seleção: Na mosca, Perto, Superou, Decepcionou), as quatro criadas em 2026-10-18 e preenchidas pelo workflow `Como foram os jogos`.
 
 Os CSVs em `airtable/` espelham o que foi carregado: `campeonatos.csv`, `times.csv` (45 de futebol), `times-nfl.csv` (32), `times-nba.csv` (30).
 
@@ -251,9 +289,17 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
 
+- **2026-10-18, Claude Code**: nova seção [Trabalho na nuvem](#trabalho-na-nuvem-sessões-pelo-celular), a pedido do usuário, que vai abrir sessões na nuvem pelo celular. O GitHub é o único canal: na nuvem, o agente commita numa branch e registra o que ficou "pendente aplicar no n8n local"; no PC, o agente roda `git fetch`, procura branches não juntadas e aplica no n8n. Regra nº 1, passo 5, agora inclui `git fetch`. Commitado junto com o "Como foram os jogos" na branch `como-foram-os-jogos`.
+
+- **2026-10-18, Claude Code**: primeira execução real do `Como foram os jogos` (execução 108, rodada pelo usuário; antes ele tinha rodado por engano o `Pauta de Jogos`, execução 105, que regravou a pauta de 18/10). Mensagem e Airtable OK. Achado: o Gemini converteu "89'" em "aos 49 minutos do segundo tempo" (Espanyol x Atleti). Corrigido no prompt (`resultados-preparar-avaliacao.js`: citar o minuto como veio), aplicado no n8n (`jsCode` pela API) e no JSON do repositório; reteste local OK ("aos 89 minutos"). A linha desse jogo no Airtable ainda tem a frase antiga até a próxima execução. **Sem commit.** Pendente: ativar o gatilho das 6h30 (perguntar ao usuário).
+
+- **2026-10-18, Claude Code**: "como foram os jogos de ontem", a ideia escolhida pelo usuário numa lista de sugestões. Workflow novo `Como foram os jogos` (`rkBpz5jBl3ncIfdX`, criado pela API do n8n e **inativo**), 6 arquivos `n8n/code/resultados-*.js`, exportação `n8n/workflow-como-foram-os-jogos.json`, 4 colunas novas na tabela Jogos (workflow temporário com a API de metadados, já apagado). Testes locais com dados reais: 17/10 (15 jogos, todos achados na ESPN; frases do Gemini conferidas contra os fatos, sem invenção), 16/10 (6 NBA + 1 Brasileirão; NBA de pré-temporada superavaliada: 3 jogos 4 → 2), Gemini falhando (só placares, com aviso) e dia sem pauta (sem mensagem). Validação no n8n: zero erros. README, MANUAL e ROADMAP atualizados. **Sem commit.** Pendente: o usuário rodar o workflow à mão (manda mensagem e grava no Airtable) e, se aprovar, ativar o gatilho das 6h30.
+
+- **2026-10-17, Claude Code**: apagada no n8n, com o OK do usuário, a execução 40 do `Bot da Pauta`, a que guardava o token do bot no log de erro. Conferidos os outros erros do bot (56 e 66): são timeouts de rede ao conectar no Telegram por IPv6 e não mostram o token, o que confirma que a limpeza de erros dos nós Code funciona. Gerar um token novo no BotFather continua opcional. Sem commit.
+
 - **2026-10-17, Claude Code**: modelo de reserva quando o Gemini falha, com os Nemotron grátis do OpenRouter (chave `OPENROUTER_API_KEY` adicionada ao `.env` pelo usuário). Testados com o prompt real (21 jogos de NFL, Premier League e Brasileirão): Super 120B sem raciocínio ficou mais perto do Gemini (13 notas iguais, 8 a 1 ponto); Ultra sobrecarregado; Lightning travou; Super VL rápido, mas notas mais baixas na NFL. Mudanças: `preparar-pedido-gemini.js` monta `bodyOpenRouter`; `selecionar-jogos.js` lê Gemini ou reserva e devolve `llmReserva`; `montar-mensagem.js` avisa (ℹ️/⚠️). Nós novos `Gemini respondeu?` (IF) e `Nemotron (reserva)` (HTTP); nós de `Selecionar jogos` em diante andaram 224 px para a direita. Aplicado e publicado no n8n (20 operações parciais), validação sem erros. JSON do repositório sincronizado, inclusive as posições do n8n vivo (estavam diferentes). README, MANUAL, ROADMAP e `.env.example` atualizados. Commitado na `main` com push. Pendente: execução real com o Gemini falhando; reserva também no AI Agent do bot (`Bot da Pauta`, item aberto no ROADMAP).
 
-- **2026-10-17, Claude Code**: bot do Telegram que responde perguntas com AI Agent (workflow `Bot da Pauta` + subfluxos `Bot - pauta do dia` e `Bot - placar ESPN`), escolhas do usuário: polling (sem túnel) e ferramentas Airtable + ESPN ao vivo. Depois, perguntas por áudio (transcrição pelo Gemini). Código em `n8n/code/bot-*.js`, exportações em `n8n/workflow-bot-*.json`, README/MANUAL/ROADMAP atualizados. Testes locais com ESPN real e mocks de Telegram/Gemini; conversa real por texto OK (execuções 36 e 38); prompt corrigido para sempre chamar ferramenta (a 1ª resposta a "onde vai passar" veio sem consultar nada). Achado: a execução 40 (versão antiga, nó HTTP) gravou no log de erro a URL do Telegram **com o token do bot**; corrigido movendo as chamadas para nós Code. Áudio real confirmado na execução 49. Commitado (`91c97ed`), na `main` com push. **Pendente**: apagar a execução 40 (pedir ao usuário); modelo de reserva (Nemotron via OpenRouter, chave sendo criada em outra sessão). Também movida para cá uma entrada de 16/10 (desfalques um por linha, commit `0f84392`) que estava fora do lugar.
+- **2026-10-17, Claude Code**: bot do Telegram que responde perguntas com AI Agent (workflow `Bot da Pauta` + subfluxos `Bot - pauta do dia` e `Bot - placar ESPN`), escolhas do usuário: polling (sem túnel) e ferramentas Airtable + ESPN ao vivo. Depois, perguntas por áudio (transcrição pelo Gemini). Código em `n8n/code/bot-*.js`, exportações em `n8n/workflow-bot-*.json`, README/MANUAL/ROADMAP atualizados. Testes locais com ESPN real e mocks de Telegram/Gemini; conversa real por texto OK (execuções 36 e 38); prompt corrigido para sempre chamar ferramenta (a 1ª resposta a "onde vai passar" veio sem consultar nada). Achado: a execução 40 (versão antiga, nó HTTP) gravou no log de erro a URL do Telegram **com o token do bot**; corrigido movendo as chamadas para nós Code. Áudio real confirmado na execução 49. Commitado (`91c97ed`), na `main` com push. **Pendente**: ~~apagar a execução 40~~ (apagada, ver entrada acima); modelo de reserva (Nemotron via OpenRouter, chave sendo criada em outra sessão). Também movida para cá uma entrada de 16/10 (desfalques um por linha, commit `0f84392`) que estava fora do lugar.
 - **2026-10-16, Claude Code**: desfalques na mensagem agora saem um por linha (🚑 + jogador), em vez de tudo corrido; `montar-mensagem.js` divide o campo `desfalques` por `;`. Aplicado e publicado no n8n e no JSON do repositório. Commitado em `0f84392`.
 
 - **2026-10-16, Claude Code**: transmissão dos jogos via API pública do site da 365Scores. 3 arquivos novos em `n8n/code/` (pedidos, casar, adicionar), `montar-mensagem.js` (linha 📺 + aviso) e `separar-jogos-airtable.js` (coluna `Transmissão`) agora leem `Adicionar transmissão`. Coluna `Transmissão` criada no Airtable pela API de metadados (workflow temporário, já apagado). Teste local: pauta real de 16/10 (execução 29) e 30 jogos de 18/10 (NFL, PL, La Liga, Serie A, Bundesliga, Brasileirão), 100% casados; queda da 365Scores e dia sem jogos testados. Aplicado e publicado no n8n (20 operações parciais), validação sem erros. JSON do repositório, README, MANUAL e ROADMAP atualizados. Usuário rodou o fluxo (execução 31, sucesso) e confirmou a linha 📺. Commitado na `main` com push.

@@ -128,6 +128,40 @@ Por que essas escolhas:
 
 ---
 
+## Como foram os jogos (a nota acertou?)
+
+Às 6h30, antes da pauta nova, o workflow **Como foram os jogos** pega os jogos da pauta de ontem, busca o resultado e pede ao Gemini uma **nota de depois do jogo**, na mesma escala de 1 a 5. Depois compara com a nota que a pauta deu de manhã. O resultado vai para o Telegram e para o Airtable. Com o tempo, a tabela Jogos mostra se as notas acertam e em que tipo de jogo elas erram.
+
+```mermaid
+flowchart LR
+    S["⏰ 6h30"] --> D["Dia da pauta<br/>(ontem)"]
+    D --> J["Jogos da pauta<br/>(Airtable)"]
+    J --> B["Buscar placares<br/>football-data + ESPN"]
+    B --> M["Montar resultados<br/>(fatos do jogo)"]
+    M --> G["Gemini<br/>nota de depois do jogo"]
+    G --> C["Comparar notas"]
+    C --> A[("Airtable<br/>Placar, Nota do jogo,<br/>Como foi, Acerto")]
+    C --> T["📱 Telegram"]
+```
+
+Na mensagem, os jogos aparecem em três grupos: 📈 os que **surpreenderam** (2 pontos ou mais acima da nota da pauta), 📉 os que **decepcionaram** (2 ou mais abaixo) e 🎯 os que saíram **como previsto**. No topo vem o placar do acerto, por exemplo *"7 de 15 na mosca · 7 por 1 ponto · 1 errou por 2 ou mais"*.
+
+| Peça | O que faz |
+|---|---|
+| **Buscar placares** (Code) | Placar oficial pela football-data (uma chamada com todos os ids). "Como foi" pela ESPN, numa chamada por liga e por dia: minuto e autor dos gols, expulsões, posse, chutes no gol e, na NBA e na NFL, placar por quarto, prorrogação, destaques e a manchete do jogo. As respostas da ESPN são enxugadas para ~2 KB por liga. |
+| **Montar resultados** (Code) | Acha cada jogo da football-data na ESPN pelo horário (±15 min) e pelo nome dos times, e calcula os fatos: virada, empate arrancado, gol decisivo a partir dos 85', goleada, prorrogação ou pênaltis. |
+| **Preparar avaliação** + **Gemini** | Pede a nota de depois do jogo e uma frase de "como foi". O modelo recebe o contexto de antes do jogo (o briefing), **mas não a nota prevista**. |
+| **Comparar notas** (Code) | Mesma nota: *Na mosca*. 1 ponto de diferença: *Perto*. 2 ou mais: *Superou* ou *Decepcionou*. |
+
+Por que essas escolhas:
+- **Avaliação cega à nota da manhã.** Se o modelo visse o "4" da pauta, tenderia a confirmar o número. Sem ele, a comparação mede alguma coisa. O limite: o mesmo modelo dá as duas notas, então isso mede a coerência do Gemini com ele mesmo, não com um editor humano. O próximo passo natural é a produção corrigir a coluna *Nota do jogo* quando discordar, criando um gabarito humano.
+- **Os fatos são calculados no código, não pelo LLM.** Virada, gol aos 89' e margem de pontos saem da linha do tempo da ESPN. O modelo só interpreta, e o prompt proíbe citar jogador ou lance que não esteja nos fatos. No teste com a pauta real de 17/10, todos os detalhes das frases (gol aos 7', expulsão aos 43', virada do PSG) batiam com os dados.
+- **Placar da football-data, detalhes da ESPN.** A football-data casa pelo id, então o placar é exato. O plano grátis dela não traz os gols, e a ESPN traz. Se a ESPN não achar o jogo, ele sai só com o placar e o intervalo, que ainda mostra virada no segundo tempo.
+- **Um workflow separado, não mais nós na pauta.** O resumo de ontem pode falhar, ou ser desligado, sem afetar a pauta das 7h. Também fica mais fácil de testar e de explicar.
+- **O que os primeiros testes mostraram:** na pré-temporada da NBA, a pauta deu nota 4 para seis jogos. Três viraram passeio de mais de 15 pontos (4 → 2), e só o 76ers x Celtics, decidido na prorrogação, subiu para 5. É o tipo de padrão que serve para ajustar o prompt da pauta.
+
+---
+
 ## Regras de seleção
 
 | Campeonato | O que entra |
@@ -172,6 +206,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
 │   ├── workflow-bot-da-pauta.json     # bot que responde perguntas (AI Agent)
 │   ├── workflow-bot-pauta-do-dia.json # ferramenta do bot: pauta no Airtable
 │   ├── workflow-bot-placar-espn.json  # ferramenta do bot: placar da ESPN
+│   ├── workflow-como-foram-os-jogos.json # resultado da pauta de ontem × nota prevista
 │   └── code/                          # código de cada nó Code, comentado
 ├── airtable/
 │   ├── campeonatos.csv                # configuração dos campeonatos
@@ -201,6 +236,7 @@ Para cada jogo o Gemini recebe campeonato, fase, rodada, horário, a posição d
    - *Telegram API* com o token do bot
 5. Rode o `workflow-smoke-test.json` para conferir as quatro APIs, execute o fluxo principal manualmente uma vez e depois ative-o.
 6. **Bot (opcional):** importe primeiro os dois subfluxos (`workflow-bot-pauta-do-dia.json` e `workflow-bot-placar-espn.json`) e publique-os. Depois importe `workflow-bot-da-pauta.json`, escolha os subfluxos nos nós `pauta_do_dia` e `placar_espn`, crie uma credencial *Google Gemini (PaLM) API* (nome `Gemini`) e ative. O bot usa `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` e `GEMINI_API_KEY` do `.env`.
+7. **Como foram os jogos (opcional):** crie na tabela Jogos as colunas `Placar` (texto), `Nota do jogo` (número), `Como foi` (texto longo) e `Acerto da nota` (seleção). Importe `workflow-como-foram-os-jogos.json`, escolha as mesmas credenciais de Airtable, Gemini e Telegram e rode uma vez à mão. O nó `Buscar placares` usa `FOOTBALL_DATA_TOKEN` do `.env`. Para revisar outro dia, troque a data no nó `Dia da pauta`.
 
 > O n8n roda local, então o gatilho das 7h só dispara com o PC ligado. Para produção, o mesmo fluxo roda em um servidor ou no n8n Cloud sem alterações.
 
