@@ -144,7 +144,7 @@ flowchart LR
     C --> T["📱 Telegram"]
 ```
 
-Na mensagem, os jogos aparecem em três grupos: 📈 os que **surpreenderam** (2 pontos ou mais acima da nota da pauta), 📉 os que **decepcionaram** (2 ou mais abaixo) e 🎯 os que saíram **como previsto**. No topo vem o placar do acerto, por exemplo *"7 de 15 na mosca · 7 por 1 ponto · 1 errou por 2 ou mais"*.
+Na mensagem, só os jogos relevantes aparecem com detalhe: 📈 os que **surpreenderam** (2 pontos ou mais acima da nota da pauta), 📉 os que **decepcionaram** (2 ou mais abaixo) e 🔥 os **jogos para lembrar** (nota 5 depois de jogados), no máximo 8. Os demais viram uma linha (*"Mais 9 jogos saíram sem surpresa"*) e ficam completos no Airtable: a mensagem é para ler em um minuto, o Airtable é o registro. Se o Gemini falhar, não dá para saber o que foi relevante, e saem todos os placares. No topo vem o placar do acerto, por exemplo *"7 de 15 na mosca · 7 por 1 ponto · 1 errou por 2 ou mais"*.
 
 | Peça | O que faz |
 |---|---|

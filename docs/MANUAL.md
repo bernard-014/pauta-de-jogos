@@ -33,7 +33,9 @@ A resposta pode levar até um minuto para chegar. Quando a pergunta é por áudi
 
 - 📈 **Surpreenderam**: valeram 2 pontos ou mais do que a pauta previu.
 - 📉 **Decepcionaram**: valeram 2 pontos ou mais a menos.
-- 🎯 **Como previsto**: mesma nota ou 1 ponto de diferença.
+- 🔥 **Jogos para lembrar**: valeram nota 5 depois de jogados, mesmo que a pauta já esperasse.
+
+Para a mensagem ficar curta, só esses jogos aparecem (no máximo 8). Os que saíram sem surpresa entram numa linha só, *"Mais 9 jogos saíram sem surpresa"*, e estão completos no Airtable (placar, nota e frase).
 
 No topo vem o acerto do dia, por exemplo *"7 de 15 na mosca"*. A nota de depois do jogo também é dada pelo LLM, a partir do placar, dos gols e dos lances (a ESPN informa quem marcou e quando). A frase de cada jogo cita só o que veio nesses dados, mas confira antes de usar no ar. Se você discordar da nota, corrija a coluna **Nota do jogo** no Airtable: com o tempo, isso vira um gabarito para melhorar as notas da pauta.
 

@@ -172,6 +172,7 @@ O código de cada nó Code está em `n8n/code/` e é **a fonte da verdade**:
 - O plano grátis da football-data só traz placar final e do intervalo, sem gols. Os gols, expulsões e estatísticas vêm do `competitions[0].details` e `statistics` da ESPN; NBA/NFL trazem `linescores` por quarto, `leaders` (o `rating` resume "24 PTS, 7 REB") e `headlines`.
 - O Gemini não recebe a nota prevista (avaliação cega). Virada, gol decisivo (≥85' mudando o resultado), empate arrancado e goleada são calculados no código.
 - Sem jogo na pauta de ontem, não sai mensagem nem gravação.
+- A mensagem só detalha os jogos relevantes: Superou, Decepcionou e nota 5 depois do jogo (`MAX_DESTAQUES` = 8, nessa prioridade). Os demais viram a linha "Mais N jogos saíram sem surpresa"; o Airtable recebe todos. Com o Gemini fora, saem todos os placares.
 
 | Nó | Arquivo |
 |---|---|
@@ -288,6 +289,8 @@ Sem ler o `.env`: crie um **workflow temporário** no n8n (`Webhook` → `Code` 
 ## Registro de mudanças
 
 Mais recente no topo. Uma entrada por tarefa: **data, agente, o que mudou, onde está (commit/branch/n8n/Airtable), o que ficou pendente.**
+
+- **2026-10-18, Claude Code**: a pedido do usuário ("não precisa de tantos jogos"), a mensagem do `Como foram os jogos` só detalha os relevantes: 📈 surpreenderam, 📉 decepcionaram e 🔥 jogos para lembrar (nota 5 depois do jogo), até 8; o grupo "Como previsto" virou uma linha com a contagem. O Airtable continua recebendo todos. Teste local com a pauta real de 17/10: de 15 para 6 jogos, 1.331 caracteres; com o Gemini falhando, saem todos os placares. Só mudou `resultados-montar-mensagem.js`; aplicado no n8n (`jsCode` pela API, conferido na versão publicada) e no JSON do repositório. Commitado e juntado na `main` com push (autorizado pelo usuário antes de dormir). Pendente: o usuário ver a mensagem da próxima execução.
 
 - **2026-10-18, Claude Code**: ativado, a pedido do usuário, o gatilho das 6h30 do `Como foram os jogos` (`rkBpz5jBl3ncIfdX`). Conferido que a versão publicada tem a correção do minuto no prompt. Primeira execução automática: 18/10 às 6h30, com a pauta de 17/10 (os mesmos 15 jogos da execução 108). Commitado (`c2f4fc3`), juntado na `main` (ff-only) com push.
 

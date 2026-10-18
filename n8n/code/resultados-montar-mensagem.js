@@ -1,9 +1,12 @@
 // Nó Code "Montar mensagem" do workflow "Como foram os jogos" (modo: Run Once for All Items)
 // Mensagem do Telegram (HTML) com o resultado dos jogos da pauta de ontem e o acerto das notas.
-// Os jogos vêm separados em: os que surpreenderam, os que decepcionaram e os que saíram como previsto.
+// Só os jogos relevantes entram com detalhe: os que surpreenderam, os que decepcionaram e os que valeram
+// nota 5 depois de jogados (no máximo MAX_DESTAQUES). Os demais viram uma linha com a contagem; todos ficam
+// gravados no Airtable. Se o Gemini falhar, não há como saber o que foi relevante e saem todos os placares.
 // Sem jogo na pauta de ontem, não sai mensagem (nada para comparar).
 
 const LIMITE = 3900;
+const MAX_DESTAQUES = 8;
 const { data, jogos, resumo, llmFalhou, falhas } = $('Comparar notas').first().json;
 if (!jogos.length) return [];
 
@@ -32,9 +35,17 @@ const comPlacar = jogos.filter((j) => j.placar);
 const grupos = [
   { titulo: '📈 <b>SURPREENDERAM</b>', jogos: ordenar(comPlacar.filter((j) => j.acerto === 'Superou')) },
   { titulo: '📉 <b>DECEPCIONARAM</b>', jogos: ordenar(comPlacar.filter((j) => j.acerto === 'Decepcionou')) },
-  { titulo: '🎯 <b>COMO PREVISTO</b>', jogos: ordenar(comPlacar.filter((j) => ['Na mosca', 'Perto'].includes(j.acerto))) },
+  { titulo: '🔥 <b>JOGOS PARA LEMBRAR</b>', jogos: ordenar(comPlacar.filter((j) => j.notaJogo === 5 && ['Na mosca', 'Perto'].includes(j.acerto))) },
   { titulo: '📋 <b>RESULTADOS</b>', jogos: ordenar(comPlacar.filter((j) => !j.acerto)) },
 ];
+// Corta no limite de destaques, na ordem dos grupos (surpresas e decepções têm prioridade)
+let vagas = MAX_DESTAQUES;
+for (const g of grupos.slice(0, 3)) {
+  g.jogos = g.jogos.slice(0, Math.max(0, vagas));
+  vagas -= g.jogos.length;
+}
+const mostrados = grupos.reduce((n, g) => n + g.jogos.length, 0);
+const outros = comPlacar.length - mostrados;
 const semResultado = jogos.filter((j) => !j.placar);
 
 const avisos = [];
@@ -53,6 +64,9 @@ for (const g of grupos) {
   if (!g.jogos.length) continue;
   adicionar(g.titulo);
   for (const j of g.jogos) adicionar(linhasDoJogo(j));
+}
+if (outros > 0) {
+  adicionar(`➕ ${outros === 1 ? 'Mais 1 jogo saiu' : `Mais ${outros} jogos saíram`} sem surpresa (placar e nota no Airtable).`);
 }
 if (semResultado.length) {
   adicionar(['⏸️ <b>SEM RESULTADO</b>', ...semResultado.map((j) => `${html(j.mandante)} x ${html(j.visitante)}: ${html(j.situacao.toLowerCase())}`)].join('\n'));
